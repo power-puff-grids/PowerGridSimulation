@@ -6,6 +6,8 @@ __pycache__/
 htmlcov/
 .DS_Store
 .env
-data/generated/
+data/generated/*
+!data/generated/.gitkeep
 outputs/
 .vscode/
+/context.md

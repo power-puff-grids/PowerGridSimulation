@@ -1,0 +1,1 @@
+run_id,snapshot_id,timestamp,scenario,description,converged,bus_1_voltage_pu,bus_2_voltage_pu,bus_3_voltage_pu,bus_4_voltage_pu,line_1_loading_percent,line_2_loading_percent,line_3_loading_percent,solar_output_mw,pump_demand_mw,pump_reactive_demand_mvar,battery_power_mw,battery_soc_percent
