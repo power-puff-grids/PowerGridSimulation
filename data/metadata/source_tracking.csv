@@ -1,0 +1,5 @@
+id,variable_or_decision,value_or_use,unit,category,source_or_rationale,verification_status
+A001,normal solar output,0.15,MW,engineering assumption,Representative project-scale value supplied by team,provisional; not externally validated
+A002,dust solar reduction,50,%,synthetic condition,Controlled scenario supplied by team; not a measured dust-loss estimate,provisional
+A003,solar pattern,candidate input,,observed/contextual,CIMIS or NASA POWER; source not yet selected,not acquired
+A004,agricultural demand context,candidate calibration,,regional aggregate,California Energy Commission; source not yet selected,not acquired
