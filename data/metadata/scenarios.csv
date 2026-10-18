@@ -1,0 +1,4 @@
+scenario,condition_type,solar_setpoint_mw,pump_setpoint_mw,pump_reactive_setpoint_mvar,battery_setpoint_mw,battery_soc_percent,status
+normal,normal,0.15,0.25,0.08,0,50,provisional engineering assumptions
+high_irrigation_demand,high_irrigation,0.15,0.4,,0,50,provisional; reactive demand unresolved
+dust_reduced_solar,dust_reduced_solar,0.075,0.25,0.08,0,50,provisional; controlled 50% PV reduction

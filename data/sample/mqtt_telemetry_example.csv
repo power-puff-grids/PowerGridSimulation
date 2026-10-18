@@ -1,0 +1,2 @@
+schema_version,run_id,snapshot_id,message_id,timestamp,device,measurements,scenario
+1.0,example-run,example-snapshot,example-message,2026-10-18T14:00:00Z,solar_pv,"{""active_power_kw"":150.0,""voltage_kv"":12.47}",normal
