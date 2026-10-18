@@ -13,7 +13,7 @@ Read [DATA_SCHEMA.md](DATA_SCHEMA.md) before implementing telemetry, attacks or 
 - `data/sample/`: explicitly labeled interface fixtures; not validated research results.
 - `data/metadata/`: feature definitions, provisional scenarios and source tracking.
 
-Brooklyn produces physical results; Brian publishes/subscribes to `grid/telemetry`; Audrey modifies copies of messages; Alina combines records and detects discrepancies. Coordinate proposed identifiers and timestamp semantics before integration.
+Brooklyn produces physical results; Brian publishes/subscribes to `grid/telemetry`; Audrey modifies copies of messages; Alina combines records and detects discrepancies. The proposed v1.0 telemetry contract groups measurements by device and snapshot; attack labels stay in a separate ground-truth log. Physical results retain MW/per-unit units; telemetry uses explicit kW/kV keys with documented conversions. Review the contract before integration.
 
 ## Simulation status
 
