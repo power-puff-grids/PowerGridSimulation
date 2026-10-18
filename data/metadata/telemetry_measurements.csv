@@ -1,0 +1,16 @@
+device,measurement,unit,physical_field,conversion
+bus_1,voltage_kv,kV,bus_1_voltage_pu,multiply by bus_1 nominal voltage in kV
+bus_2,voltage_kv,kV,bus_2_voltage_pu,multiply by bus_2 nominal voltage in kV
+bus_3,voltage_kv,kV,bus_3_voltage_pu,multiply by bus_3 nominal voltage in kV
+bus_4,voltage_kv,kV,bus_4_voltage_pu,multiply by bus_4 nominal voltage in kV
+line_1,loading_percent,%,line_1_loading_percent,identity
+line_2,loading_percent,%,line_2_loading_percent,identity
+line_3,loading_percent,%,line_3_loading_percent,identity
+solar_pv,active_power_kw,kW,solar_output_mw,multiply by 1000
+solar_pv,voltage_kv,kV,bus_2_voltage_pu,multiply by bus_2 nominal voltage in kV
+irrigation_pump,active_power_kw,kW,pump_demand_mw,multiply by 1000
+irrigation_pump,reactive_power_kvar,kvar,pump_reactive_demand_mvar,multiply by 1000
+irrigation_pump,voltage_kv,kV,bus_4_voltage_pu,multiply by bus_4 nominal voltage in kV
+battery,active_power_kw,kW,battery_power_mw,multiply by 1000
+battery,soc_percent,%,battery_soc_percent,identity
+battery,voltage_kv,kV,bus_3_voltage_pu,multiply by bus_3 nominal voltage in kV

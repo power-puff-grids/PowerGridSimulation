@@ -1,14 +1,13 @@
 {
+  "schema_version": "1.0",
   "run_id": "example-run",
   "snapshot_id": "example-snapshot",
   "message_id": "example-message",
   "timestamp": "2026-10-18T14:00:00Z",
-  "scenario": "normal",
   "device": "solar_pv",
-  "measurement": "power_mw",
-  "value": 0.15,
-  "unit": "MW",
-  "condition_type": "normal",
-  "attack_type": "none",
-  "attack_label": 0
+  "measurements": {
+    "active_power_kw": 150.0,
+    "voltage_kv": 12.47
+  },
+  "scenario": "normal"
 }
