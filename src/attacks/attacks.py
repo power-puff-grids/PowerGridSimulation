@@ -1,9 +1,17 @@
 from copy import deepcopy # creates a copy so that the original message is not modified
 from datetime import datetime, timezone 
+from math import isfinite
 from uuid import uuid4 # used to generate unique identifiers for each attack record
 
 
 def false_data_injection(message, offset_kw): # offset_kw is the amount to manipulate by.
+    # reject invalid inputs for offset_kw.
+    if isinstance(offset_kw, bool) or not isinstance(offset_kw, (int, float)):
+        raise ValueError("offset_kw must be a number.")
+
+    if not isfinite(offset_kw):
+        raise ValueError("offset_kw must be finite.")
+
     manipulated_message = deepcopy(message)
     manipulated_message["measurements"]["active_power_kw"] += offset_kw
 
