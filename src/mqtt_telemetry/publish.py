@@ -23,6 +23,8 @@ class TelemPublisher:
                 }
         if random.random() < self.drop_prob:
             return
+        if self.max_delay:
+            timesleep(random.uniform(0.0, self.max_delay))
         self.client.publish(f"grid/telemetry/{device}", json.dumps(msg))
         
 
