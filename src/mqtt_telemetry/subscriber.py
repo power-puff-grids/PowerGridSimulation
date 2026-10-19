@@ -1,3 +1,4 @@
+#filename - subscriber.py
 import json
 from datetime import datetime
 import paho.mqtt.client as mqtt
@@ -15,7 +16,7 @@ def on_message(client, userdata, msg):
 #more extensive input validation wip
     difference = datetime.now() - datetime.fromisoformat(m["timestamp"])
     latency_ms = (difference.total_seconds() * 1000)
-    print(json.dumps(m))
+    print(json.dumps(m, indent = 2))
     print(f"latency: {latency_ms:.1f} ms \n")
 
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
