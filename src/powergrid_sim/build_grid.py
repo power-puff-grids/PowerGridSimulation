@@ -2,6 +2,11 @@ import pandapower as pp
 import pandas as pd
 import pandapower.plotting as plot
 
+if __package__:
+  from .pump_parameters import full_load_motor_demand
+else:
+  from pump_parameters import full_load_motor_demand
+
 def build_grid() -> pp.pandapowerNet:
   net = pp.create_empty_network(name="Central Valley Agricultural Microgrid")
 
@@ -10,12 +15,12 @@ def build_grid() -> pp.pandapowerNet:
   # Bus 2: solar PV
   # Bus 3: battery storage
   # Bus 4: irrigation pump
-  bus_1 = pp.create_bus(net, vn_kv=12.47, name="Bus 1 - Utility")
-  bus_2 = pp.create_bus(net, vn_kv=12.47, name="Bus 2 - Solar")
-  bus_3 = pp.create_bus(net, vn_kv=12.47, name="Bus 3 - Battery")
-  bus_4 = pp.create_bus(net, vn_kv=12.47, name="Bus 4 - Irrigation")
+  bus_1 = pp.create_bus(net, vn_kv=12.47, name="Bus 1 - Utility")   # Nominal voltage: 12.47 kV
+  bus_2 = pp.create_bus(net, vn_kv=12.47, name="Bus 2 - Solar")     # Nominal voltage: 12.47 kV
+  bus_3 = pp.create_bus(net, vn_kv=12.47, name="Bus 3 - Battery")     # Nominal voltage: 12.47 kV
+  bus_4 = pp.create_bus(net, vn_kv=12.47, name="Bus 4 - Irrigation")  # Nominal voltage: 12.47 kV
 
-  # Create optional geographic positions for plotting
+  # create geographic positions for plotting
   net["bus_geodata"] = pd.DataFrame(
       index=net.bus.index,
       columns=["x", "y"],
@@ -29,15 +34,15 @@ def build_grid() -> pp.pandapowerNet:
   net.bus_geodata.loc[bus_4, ["x", "y"]] = [3, 0]
 
   # Utility grid connection:
-  pp.create_ext_grid(net, bus=bus_1, vm_pu=1.00, name="Utility Connection")
+  pp.create_ext_grid(net, bus=bus_1, vm_pu=1.00, name="Utility Connection")  # Voltage setpoint: 1.0 per unit
   
   # Distribution lines connecting to the buses
   line_parameters = {
-    "length_km": 1.0,
-    "r_ohm_per_km": 0.20,
-    "x_ohm_per_km": 0.08,
-    "c_nf_per_km": 0.0,
-    "max_i_ka": 0.40,
+    "length_km": 1.0,      # Length (km) of each distribution line
+    "r_ohm_per_km": 0.20,  # Resistance (ohms/km)
+    "x_ohm_per_km": 0.08,  # Reactance (ohms/km)
+    "c_nf_per_km": 0.0,    # Capacitance (nF/km); neglected here
+    "max_i_ka": 0.40,      # Rated current (kA); 400 A
   }
 
   pp.create_line_from_parameters(
@@ -45,7 +50,11 @@ def build_grid() -> pp.pandapowerNet:
     from_bus=bus_1,
     to_bus=bus_2,
     name="Line 1-2",
-    **line_parameters,
+    length_km=line_parameters["length_km"],
+    r_ohm_per_km=line_parameters["r_ohm_per_km"],
+    x_ohm_per_km=line_parameters["x_ohm_per_km"],
+    c_nf_per_km=line_parameters["c_nf_per_km"],
+    max_i_ka=line_parameters["max_i_ka"],
   )
 
   pp.create_line_from_parameters(
@@ -53,7 +62,11 @@ def build_grid() -> pp.pandapowerNet:
     from_bus=bus_2,
     to_bus=bus_3,
     name="Line 2-3",
-    **line_parameters,
+    length_km=line_parameters["length_km"],
+    r_ohm_per_km=line_parameters["r_ohm_per_km"],
+    x_ohm_per_km=line_parameters["x_ohm_per_km"],
+    c_nf_per_km=line_parameters["c_nf_per_km"],
+    max_i_ka=line_parameters["max_i_ka"],
   )
 
   pp.create_line_from_parameters(
@@ -61,15 +74,19 @@ def build_grid() -> pp.pandapowerNet:
     from_bus=bus_3,
     to_bus=bus_4,
     name="Line 3-4",
-    **line_parameters,
+    length_km=line_parameters["length_km"],
+    r_ohm_per_km=line_parameters["r_ohm_per_km"],
+    x_ohm_per_km=line_parameters["x_ohm_per_km"],
+    c_nf_per_km=line_parameters["c_nf_per_km"],
+    max_i_ka=line_parameters["max_i_ka"],
   )
 
   # Solar PV generation:
   pp.create_sgen(
     net,
     bus=bus_2,
-    p_mw=0.15,
-    q_mvar=0.0,
+    p_mw=0.15,           # Solar active power (MW); 150 kW
+    q_mvar=0.0,          # Solar reactive power (MVAr)
     name="Solar PV"
   )
 
@@ -77,21 +94,23 @@ def build_grid() -> pp.pandapowerNet:
   pp.create_storage(
     net,
     bus=bus_3,
-    p_mw=0.0,
-    max_e_mwh=0.20,
-    soc_percent=50.0,
-    min_e_mwh=0.0,
-    max_p_mw=0.10,
-    min_p_mw=-0.10,
+    p_mw=0.0,           # Battery power (MW); positive charges, negative discharges
+    max_e_mwh=0.20,     # Maximum stored energy (MWh); 200 kWh
+    soc_percent=50.0,   # Initial state of charge (%)
+    min_e_mwh=0.0,      # Minimum stored energy (MWh)
+    max_p_mw=0.10,      # Configured charging limit (MW); 100 kW
+    min_p_mw=-0.10,     # Configured discharging limit (MW); -100 kW
     name="Battery Storage",
   )
 
-  # Irrigation pump demand:
+  # Normal snapshot: booster on at rated output, well off, reservoir available.
+  # Equivalent feeder load: lower-voltage motor connection/losses are omitted.
+  pump_p_mw, pump_q_mvar = full_load_motor_demand("booster")
   pp.create_load(
     net,
     bus=bus_4,
-    p_mw=0.25,
-    q_mvar=0.08,
+    p_mw=pump_p_mw,     # Derived active demand (MW)... ~31.698 kW
+    q_mvar=pump_q_mvar, # Derived reactive demand (MVAr)... ~ 22.125 kvar
     name="Irrigation Pump",  
   )
 
@@ -102,6 +121,8 @@ def main() -> None:
 
   net = build_grid()
   pp.runpp(net)
+
+
 
   print("\nPower flow completed successfully")
   print("\nBus voltages: ")
@@ -116,7 +137,18 @@ def main() -> None:
   print("\nPower consumed by irrigation pump:")
   print(net.res_load[["p_mw", "q_mvar"]])
 
-  import pandapower.plotting as plot
+  print("\nUtility Power:")
+  print(net.res_ext_grid[["p_mw", "q_mvar"]])
+
+  print("\nTotal active line losses (MW):")
+  print(net.res_line["pl_mw"].sum())
+
+  print("\nBattery power:")
+  print(net.res_storage[["p_mw", "q_mvar"]])
+
+  print("\nBattery state of charge (%):")
+  print(net.storage[["soc_percent"]])
+
   plot.simple_plot(net, show_plot=True)
   
 
