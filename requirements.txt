@@ -5,4 +5,4 @@ scipy
 networkx
 matplotlib
 pytest
-
+paho-mqtt>=2.0
