@@ -86,3 +86,92 @@ def test_injected_at_is_current_utc():
 
     assert injected_at.utcoffset().total_seconds() == 0
     assert before <= injected_at <= after
+
+
+def test_can_target_voltage():
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text())
+    before = deepcopy(original)
+
+    changed, record = false_data_injection(
+        original, -0.5, measurement="voltage_kv"
+    )
+
+    expected = deepcopy(before)
+    expected["measurements"]["voltage_kv"] -= 0.5
+
+    assert original == before
+    assert changed == expected
+    assert record["attack_target"] == "measurements.voltage_kv"
+    assert record["original_value"] == before["measurements"]["voltage_kv"]
+    assert record["manipulated_value"] == changed["measurements"]["voltage_kv"]
+
+
+def test_can_target_battery_soc():
+    original = {
+        "schema_version": "1.0",
+        "run_id": "test-run",
+        "snapshot_id": "test-snapshot",
+        "message_id": "test-battery-message",
+        "timestamp": "2026-10-18T14:00:00Z",
+        "device": "battery",
+        "measurements": {
+            "active_power_kw": 0.0,
+            "soc_percent": 50.0,
+            "voltage_kv": 12.47,
+        },
+        "scenario": "normal",
+    }
+    before = deepcopy(original)
+
+    changed, record = false_data_injection(
+        original, -10.0, measurement="soc_percent"
+    )
+
+    expected = deepcopy(before)
+    expected["measurements"]["soc_percent"] = 40.0
+
+    assert original == before
+    assert changed == expected
+    assert record["original_message_id"] == original["message_id"]
+    assert record["attack_target"] == "measurements.soc_percent"
+    assert record["original_value"] == 50.0
+    assert record["manipulated_value"] == 40.0
+
+
+def test_rejects_unknown_measurement():
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text())
+    before = deepcopy(original)
+
+    with pytest.raises(
+        ValueError,
+        match="measurement must name an existing measurement",
+    ):
+        false_data_injection(
+            original, 10.0, measurement="voltage_typo"
+        )
+
+    assert original == before
+
+
+def test_rejects_nonfinite_result():
+    original = {
+        "message_id": "test-overflow-message",
+        "measurements": {"active_power_kw": 1e308},
+    }
+    before = deepcopy(original)
+
+    with pytest.raises(
+        ValueError,
+        match="manipulated measurement must be finite",
+    ):
+        false_data_injection(original, 1e308)
+
+    assert original == before
