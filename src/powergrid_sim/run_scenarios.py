@@ -1,8 +1,14 @@
 """Run independent steady-state scenarios on the same four-bus design."""
+import argparse
+from datetime import datetime
+import logging
+from pathlib import Path
+from uuid import uuid4
 import pandapower as pp
 from .build_grid import build_grid
 from .scenarios import Scenario, get_scenarios
 from .validation import validate_results
+from .physical_export import DEFAULT_OUTPUT, DEFAULT_TIMESTAMP, physical_row, write_physical_csv
 
 def apply_scenario(net: pp.pandapowerNet, scenario: Scenario) -> None:
     # inputs for the single PV, pump equivalent, and battery.
@@ -28,8 +34,27 @@ def run_scenario(scenario: Scenario) -> pp.pandapowerNet:
     return net
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--timestamp", default=DEFAULT_TIMESTAMP,
+                        help="Synthetic event time in UTC with Z suffix. shared by independent snapshots")
+    args = parser.parse_args()
+    try:
+        if not args.timestamp.endswith("Z"):
+            raise ValueError("UTC Z suffix required")
+        datetime.fromisoformat(args.timestamp[:-1] + "+00:00")
+    except ValueError:
+        parser.error("--timestamp must be a valid UTC ISO 8601 timestamp ending in Z")
+
+    run_id = str(uuid4())
+    rows = []
     for scenario in get_scenarios():
-        net = run_scenario(scenario)
+        try:
+            net = run_scenario(scenario)
+            rows.append(physical_row(net, scenario, run_id, args.timestamp))
+        except Exception:
+            logging.exception("Run %s failed in scenario %s! CSV was not written.", run_id, scenario.scenario)
+            raise
         print(f"\nScenario: {scenario.scenario}")
         print(scenario.description)
         print(f"Converged: {net.converged}")
@@ -46,6 +71,9 @@ def main() -> None:
         print(f"Utility power (MW; positive import, negative export): {net.res_ext_grid.p_mw.sum():.9f}")
         print(f"Active line losses (MW): {net.res_line.pl_mw.sum():.9f}")
 
+    # Do not overwrite the previous CSV unless every scenario passed.
+    write_physical_csv(rows, args.output)
+    print(f"\nSaved {len(rows)} validated snapshots to {args.output}")
 
 
 if __name__ == "__main__":
