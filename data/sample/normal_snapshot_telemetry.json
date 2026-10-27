@@ -1,0 +1,127 @@
+[
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "29166789-11c2-471c-aa0d-168ca1df9635",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "bus_1",
+    "measurements": {
+      "voltage_kv": 12.47
+    },
+    "scenario": "normal"
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "8d237f72-5b03-48e3-80bd-35a57d5fd8c1",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "bus_2",
+    "measurements": {
+      "voltage_kv": 12.471755070659391
+    },
+    "scenario": "normal"
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "c340496d-a80d-4fed-bf24-5b9be2cd3258",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "bus_3",
+    "measurements": {
+      "voltage_kv": 12.471104756659239
+    },
+    "scenario": "normal"
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "90ed6907-0fda-44e5-908c-a40cc9c402dd",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "bus_4",
+    "measurements": {
+      "voltage_kv": 12.47045444449926
+    },
+    "scenario": "normal"
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "a398e82c-251e-4580-8478-3b6ec34a359d",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "line_1",
+    "measurements": {
+      "loading_percent": 1.3928240495321023
+    },
+    "scenario": "normal"
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "97709282-bb22-4cb0-a635-af5d647ea23c",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "line_2",
+    "measurements": {
+      "loading_percent": 0.4474224377713231
+    },
+    "scenario": "normal"
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "811ff17a-921f-4896-a70a-f2fc385d1e53",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "line_3",
+    "measurements": {
+      "loading_percent": 0.4474224377742344
+    },
+    "scenario": "normal"
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "c8e16e88-6e92-4c29-99e6-3977c04bb360",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 150.0,
+      "voltage_kv": 12.471755070659391
+    },
+    "scenario": "normal"
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "fbaa7500-8ff1-4ea3-9e8d-9045514b3017",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "irrigation_pump",
+    "measurements": {
+      "active_power_kw": 31.69819341126462,
+      "reactive_power_kvar": 22.12547510422073,
+      "voltage_kv": 12.47045444449926
+    },
+    "scenario": "normal"
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "7f041410-24ba-45c6-89f7-5f5253d6fea0",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "battery",
+    "measurements": {
+      "active_power_kw": 0.0,
+      "soc_percent": 50.0,
+      "voltage_kv": 12.471104756659239
+    },
+    "scenario": "normal"
+  }
+]

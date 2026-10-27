@@ -9,6 +9,7 @@ from .build_grid import build_grid
 from .scenarios import Scenario, get_scenarios
 from .validation import validate_results
 from .physical_export import DEFAULT_OUTPUT, DEFAULT_TIMESTAMP, physical_row, write_physical_csv
+from .telemetry import snapshot_messages, write_telemetry_csv
 
 def apply_scenario(net: pp.pandapowerNet, scenario: Scenario) -> None:
     # inputs for the single PV, pump equivalent, and battery.
@@ -38,7 +39,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--timestamp", default=DEFAULT_TIMESTAMP,
                         help="Synthetic event time in UTC with Z suffix. shared by independent snapshots")
+    parser.add_argument("--telemetry-output", type=Path,
+                        default=DEFAULT_OUTPUT.with_name("mqtt_telemetry.csv"))
     args = parser.parse_args()
+    if args.output.resolve() == args.telemetry_output.resolve():
+        parser.error("Physical and telemetry output paths must differ")
     try:
         if not args.timestamp.endswith("Z"):
             raise ValueError("UTC Z suffix required")
@@ -48,10 +53,17 @@ def main() -> None:
 
     run_id = str(uuid4())
     rows = []
+    messages = []
     for scenario in get_scenarios():
         try:
             net = run_scenario(scenario)
-            rows.append(physical_row(net, scenario, run_id, args.timestamp))
+            row = physical_row(net, scenario, run_id, args.timestamp)
+            # Read nominal voltages from this grid, not from an assumed pu-to-kV factor.
+            nominal_kv = {}
+            for n, name in enumerate(("Bus 1 - Utility", "Bus 2 - Solar", "Bus 3 - Battery", "Bus 4 - Irrigation"), 1):
+                nominal_kv[f"bus_{n}"] = float(net.bus.loc[net.bus.name == name, "vn_kv"].item())
+            messages.extend(snapshot_messages(row, nominal_kv))
+            rows.append(row)
         except Exception:
             logging.exception("Run %s failed in scenario %s! CSV was not written.", run_id, scenario.scenario)
             raise
@@ -73,7 +85,9 @@ def main() -> None:
 
     # Do not overwrite the previous CSV unless every scenario passed.
     write_physical_csv(rows, args.output)
+    write_telemetry_csv(messages, args.telemetry_output)
     print(f"\nSaved {len(rows)} validated snapshots to {args.output}")
+    print(f"Saved {len(messages)} original device messages to {args.telemetry_output}")
 
 
 if __name__ == "__main__":
