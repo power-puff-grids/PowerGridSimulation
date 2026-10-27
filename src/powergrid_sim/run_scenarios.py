@@ -2,6 +2,7 @@
 import pandapower as pp
 from .build_grid import build_grid
 from .scenarios import Scenario, get_scenarios
+from .validation import validate_results
 
 def apply_scenario(net: pp.pandapowerNet, scenario: Scenario) -> None:
     # inputs for the single PV, pump equivalent, and battery.
@@ -23,8 +24,7 @@ def run_scenario(scenario: Scenario) -> pp.pandapowerNet:
     net = build_grid()
     apply_scenario(net, scenario)
     pp.runpp(net, numba=False) 
-    if not net.converged:
-        raise RuntimeError(f"Power flow did not converge: {scenario.scenario}")
+    validate_results(net)
     return net
 
 def main() -> None:
@@ -33,6 +33,7 @@ def main() -> None:
         print(f"\nScenario: {scenario.scenario}")
         print(scenario.description)
         print(f"Converged: {net.converged}")
+        print("Numerical validation: passed")
         print("Bus voltages (pu):")
         print(net.res_bus[["vm_pu"]].to_string())
         print("Line loading (%):")
