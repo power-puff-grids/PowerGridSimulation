@@ -3,3 +3,13 @@ A001,normal solar output,0.15,MW,engineering assumption,Representative project-s
 A002,dust solar reduction,50,%,synthetic condition,Controlled scenario supplied by team; not a measured dust-loss estimate,provisional
 A003,solar pattern,candidate input,,observed/contextual,CIMIS or NASA POWER; source not yet selected,not acquired
 A004,agricultural demand context,candidate calibration,,regional aggregate,California Energy Commission; source not yet selected,not acquired
+A005,booster reference motor,Baldor EFM4110T; 40 hp; efficiency 0.941; PF 0.82,,observed/contextual,https://www.baldor.com/catalog/EFM4110T,recorded source review 2026-10-19; selected reference not farm measurement
+A006,well reference motor,BMR VHS405TP-4-125P; 125 hp; efficiency 0.954; PF 0.865,,observed/contextual,https://bmr-usa.com/wp-content/uploads/2022/11/BMR-USA-PRICING-CATALOG-FINAL-2.pdf; printed p.35,recorded source review 2026-10-19; selected reference not farm measurement
+A007,horsepower conversion,0.7457,kW/hp,derived,https://www.energy.gov/sites/default/files/2014/04/f15/10097517.pdf,recorded source review 2026-10-19
+A008,pump electrical demand,P=hp*0.7457/efficiency/1000; Q=P*tan(acos(PF)),MW; MVAr,derived,A005-A007; src/powergrid_sim/pump_parameters.py,implemented; full rated shaft output assumed
+A009,agricultural context,100-cropped-acre almond orchard; well and booster reference ratings,,observed/contextual,https://coststudyfiles.ucdavis.edu/2025/08/11/2024%20AlmondsSJVsouth.Final%20Draft.8.3.25.pdf; printed pp.3 5 12,recorded source review 2026-10-19; sample-cost assumptions not observations
+A010,normal and high pump operation,normal booster only; high booster plus well,,engineering assumption,Controlled electrical snapshots; reservoir available; no hydraulic schedule modeled,implemented; not field validated
+A011,feeder voltage and utility setpoint,12.47 kV; 1.0 pu,,engineering assumption,Project-scale four-bus feeder; no specific utility feeder identified,provisional
+A012,each of three distribution lines,length 1 km; R 0.20 ohm/km; X 0.08 ohm/km; C 0 nF/km; rating 0.40 kA,,engineering assumption,Project model; capacitance neglected,provisional; no physical conductor specification
+A013,battery configuration,0 MW; SOC 50%; max energy 0.20 MWh; min 0 MWh; power limits -0.10 to +0.10 MW,,engineering assumption,Idle snapshot storage; ordinary power flow does not dispatch or advance SOC,implemented; provisional equipment settings
+A014,simulated event time,2026-10-18T14:00:00Z,,synthetic condition,Fixed interface fixture time shared by independent cases,not a historical or weather-calibrated observation

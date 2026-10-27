@@ -1,4 +1,4 @@
 scenario,condition_type,solar_setpoint_mw,pump_setpoint_mw,pump_reactive_setpoint_mvar,battery_setpoint_mw,battery_soc_percent,status
-normal,normal,0.15,0.03169819341126462,0.022125475104220728,0,50,pump calculation implemented; other parameters provisional
-high_irrigation_demand,high_irrigation,0.15,0.12940521647206127,0.07880366556218818,0,50,planned only; both reference motors at rated output
-dust_reduced_solar,dust_reduced_solar,0.075,0.03169819341126462,0.022125475104220728,0,50,normal pump calculation implemented; dust runner pending
+normal,normal,0.15,0.03169819341126462,0.022125475104220728,0,50,implemented and numerically validated; equipment/solar assumptions remain provisional
+high_irrigation_demand,high_irrigation,0.15,0.12940521647206127,0.07880366556218818,0,50,implemented and numerically validated; equipment/solar assumptions remain provisional
+dust_reduced_solar,dust_reduced_solar,0.075,0.03169819341126462,0.022125475104220728,0,50,implemented and numerically validated; equipment/solar assumptions remain provisional
