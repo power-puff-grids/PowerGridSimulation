@@ -28,8 +28,13 @@ def false_data_injection(message, offset, measurement="active_power_kw"): # offs
     if not isfinite(value):
         raise ValueError("selected measurement must be finite.")
 
+    manipulated_value = value + offset
+
+    if not isfinite(manipulated_value):
+        raise ValueError("manipulated measurement must be finite.")
+
     manipulated_message = deepcopy(message)
-    manipulated_message["measurements"][measurement] += offset
+    manipulated_message["measurements"][measurement] = manipulated_value
 
     attack_record = {
         "attack_id": str(uuid4()),
