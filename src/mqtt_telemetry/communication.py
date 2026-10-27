@@ -15,6 +15,7 @@ class Comms:
     #used for sensors/devices (things we're not directly messing with) 
     def m_send(self, device, measurements, step, scenario = "normal", attack_type = "none"):
         msg = {
+                "message_id":str(uuid.uuid7())
                 "timestamp": datetime.now().isoformat(timespec="milliseconds"),
                 "device": device,
                 "measurements": measurements,
@@ -28,7 +29,7 @@ class Comms:
             time.sleep(random.uniform(0.0, self.max_delay))
         self.client.publish(f"grid/telemetry/{device}", json.dumps(msg))
         
-    #generic / more freedom, build your own payload
+    #generic, could be useful in the future
     def h_send(self, topic, payload):
         msg = dict(payload)
         msg.setdefault("message_id", str(uuid.uuid7())) # allows for msgs to pass through interceptor with data from original sender
@@ -37,7 +38,22 @@ class Comms:
             return
         if self.max_delay:
             time.sleep(random.uniform(0.0, self.max_delay))
-        self.client.publsih(topic, json.dumps(msg))
+        self.client.publish(topic, json.dumps(msg))
 
-    def subscribe(self, topic, callback=None)
+    def subscribe(self, topic, callback):
+        def on_message(client, userdata, msg):
+            try:
+                message= json.loads(msg.payload.decode())
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return
+            received = datetime.now()
+            message["received"] = received.isoformat(timespec="milliseconds")
+            
+            latency_ms = (received - datetime.fromisoformat(message.get("timestamp"))).total_seconds() *1000
+            message["latency_ms"] = latency_ms
+
+            callback(message, latency_ms)
+
+        self.client.message_callback_add(topic, on_message)
+        self.client.subscribe(topic)
 
