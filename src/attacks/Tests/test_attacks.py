@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 import pytest
 from src.attacks.attacks import false_data_injection
@@ -49,3 +50,39 @@ def test_rejects_invalid_offsets(offset):
         false_data_injection(original, offset)
 
     assert original == before
+
+# test that attack IDs are unique for each attack.
+def test_attack_ids_are_unique():
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text())
+
+    _, first_record = false_data_injection(original, 30.0)
+    _, second_record = false_data_injection(original, 30.0)
+
+    assert first_record["attack_id"] != second_record["attack_id"]
+
+# test that the injected_at timestamp is in UTC and within the expected range.
+def test_injected_at_is_current_utc():
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text())
+
+    before = datetime.now(timezone.utc)
+    _, record = false_data_injection(original, 30.0)
+    after = datetime.now(timezone.utc)
+
+    timestamp = record["injected_at"]
+
+    assert timestamp.endswith("Z")
+
+    injected_at = datetime.fromisoformat(
+        timestamp.replace("Z", "+00:00")
+    )
+
+    assert injected_at.utcoffset().total_seconds() == 0
+    assert before <= injected_at <= after
