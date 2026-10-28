@@ -1,4 +1,4 @@
-#filename - publish.py
+#filename - communication.py
 import json, random, time, uuid
 from datetime import datetime
 import paho.mqtt.client as mqtt
@@ -15,7 +15,7 @@ class Comms:
     #used for sensors/devices (things we're not directly messing with) 
     def m_send(self, device, measurements, step, scenario = "normal", attack_type = "none"):
         msg = {
-                "message_id":str(uuid.uuid7())
+                "message_id":str(uuid.uuid7()),
                 "timestamp": datetime.now().isoformat(timespec="milliseconds"),
                 "device": device,
                 "measurements": measurements,
