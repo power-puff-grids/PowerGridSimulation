@@ -1,6 +1,6 @@
 #filename - communication.py
 import json, random, time, uuid
-from datetime import datetime
+from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 
 
@@ -13,27 +13,16 @@ class Comms:
         self.max_delay = max_delay
 
     #used for sensors/devices (things we're not directly messing with) 
-    def m_send(self, device, measurements, step, scenario = "normal", attack_type = "none"):
-        msg = {
-                "message_id":str(uuid.uuid7()),
-                "timestamp": datetime.now().isoformat(timespec="milliseconds"),
-                "device": device,
-                "measurements": measurements,
-                "scenario": scenario,
-                "attack_type": attack_type,
-                "step": step
-                }
+    def m_send(self, message):
         if random.random() < self.drop_prob:
             return
         if self.max_delay:
             time.sleep(random.uniform(0.0, self.max_delay))
-        self.client.publish(f"grid/telemetry/{device}", json.dumps(msg))
+        self.client.publish(f"grid/telemetry/{message['device']}", json.dumps(msg))
         
     #generic, could be useful in the future
     def h_send(self, topic, payload):
         msg = dict(payload)
-        msg.setdefault("message_id", str(uuid.uuid7())) # allows for msgs to pass through interceptor with data from original sender
-        msg.setdefault("timestamp", datetime.now().isoformat(timespec="milliseconds"))
         if random.random() < self.drop_prob:
             return
         if self.max_delay:
@@ -46,14 +35,15 @@ class Comms:
                 message= json.loads(msg.payload.decode())
             except (json.JSONDecodeError, UnicodeDecodeError):
                 return
-            received = datetime.now()
-            message["received"] = received.isoformat(timespec="milliseconds")
-            
-            latency_ms = (received - datetime.fromisoformat(message.get("timestamp"))).total_seconds() *1000
-            message["latency_ms"] = latency_ms
-
-            callback(message, latency_ms)
+            meta = {
+                    "delivery_id": str(uuid.uuid4()),
+                    "received_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+                    }
+            callback(message, meta)
 
         self.client.message_callback_add(topic, on_message)
         self.client.subscribe(topic)
 
+    def close(self):
+        self.client.loop_stop()
+        self.client.disconnect()
