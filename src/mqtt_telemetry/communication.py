@@ -3,6 +3,18 @@ import json, random, time, uuid
 from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 
+#THESE ARE THE TOPICS, USE THEM BECAUSE MQTT WILL JUST PUBLISH TO WHATEVER 
+
+#FLOW:  PHYSICAL MEASUREMENTS (PUBLISH) -> [grid/telemetry/{device}] -> (SUBSCRIBE) INTERCEPTOR (PUBLISH) -> 
+#       [grid/processed/{device}] -> (SUBSCRIBE) DETECTOR (PUBLISH) -> [grid/alerts] (?end for now).
+#                                 |
+#                                 v
+#                         (SUBSCRIBE) CONTROLLER implemented in the future (PUBLISH) -> [grids/commands]
+
+TELEMETRY = "grid/telemetry"
+PROCESSED = "grid/processed"
+ALERTS = "grid/alerts"
+COMMANDS = "grid/commands"
 
 class Comms:
     def __init__(self, drop_prob=0.0, max_delay=0.0):
@@ -18,15 +30,11 @@ class Comms:
             return
         if self.max_delay:
             time.sleep(random.uniform(0.0, self.max_delay))
-        self.client.publish(f"grid/telemetry/{message['device']}", json.dumps(msg))
+        self.client.publish(f"{TELEMETRY}/{message['device']}", json.dumps(message))
         
-    #generic, could be useful in the future
+    #generic sender, no artificial drop or delay, mayhaps use in the relay section
     def h_send(self, topic, payload):
         msg = dict(payload)
-        if random.random() < self.drop_prob:
-            return
-        if self.max_delay:
-            time.sleep(random.uniform(0.0, self.max_delay))
         self.client.publish(topic, json.dumps(msg))
 
     def subscribe(self, topic, callback):
