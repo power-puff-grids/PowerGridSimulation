@@ -52,5 +52,16 @@ def validate_envelope(message) -> list[str]:
                     errors.append(f"{key} must be a number")
     return errors
 
-def validated(good, quarantine=None)
-        
+def validated(good, quarantine=None):
+    # allows for logging of bad/incomplete/corrupt msgs
+    errors = validate_envelope(message)
+class Recorder:
+    def __init__(self, straight_path, quarantine_path)
+        self._file = open(straight_path, "a", encoding="utf-8");
+        self._bad = open(quarantine_path, "a", encoding="utf-8");
+    def __call__(self
+
+class relay(comms, outtopic, message, meta, manipulation=None):
+## republish on receival of msg to {outtopic}/{device}
+## can choose if u want it to be manipulated or not 
+    def __    
