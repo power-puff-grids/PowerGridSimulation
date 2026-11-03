@@ -24,7 +24,7 @@ class Comms:
         self.drop_prob = drop_prob
         self.max_delay = max_delay
 
-    #used for sensors/devices (things we're not directly messing with) 
+    #used for sensors/devices  
     def m_send(self, message):
         if random.random() < self.drop_prob:
             return

@@ -52,16 +52,54 @@ def validate_envelope(message) -> list[str]:
                     errors.append(f"{key} must be a number")
     return errors
 
-def validated(good, quarantine=None):
+class Validated:
     # allows for logging of bad/incomplete/corrupt msgs
-    errors = validate_envelope(message)
-class Recorder:
-    def __init__(self, straight_path, quarantine_path)
-        self._file = open(straight_path, "a", encoding="utf-8");
-        self._bad = open(quarantine_path, "a", encoding="utf-8");
-    def __call__(self
+    def __init__(self, good, quarantine):
+        self.good = good
+        self.quarantine = quarantine
+    def __call__(self, message, meta):
+        errors = validate_envelope(message)
+        if errors:
+            log.warning("quarantined %s: %s", meta.get("delivery_id", errors))
+            self.quarantine(message, meta, errors)
+            return
+        self.good(message,meta)
 
-class relay(comms, outtopic, message, meta, manipulation=None):
+
+class Recorder:
+    #does the actual saving of the data to JSON lines file (format: { meta: {****}, message: {***} } ).
+    def __init__(self, straight_path, quarantine_path, attack_path=None)
+        self.file = open(straight_path, "a", encoding="utf-8");
+        self.bad = open(quarantine_path, "a", encoding="utf-8");
+        if attack_path:
+            self.attack = open(attack_path, "a", encoding="utf-8");
+        else:
+            self.attack = None
+    def __call__(self)
+        self.file.write(json.dumps({"meta": meta, "message": message}) + "\n")
+        self.file.flush()
+    def quarantine(self, message, meta, errors):
+        self.bad.write(json.dumps({"meta": meta, "message": message, "errors": errors}) + \n)
+        self.bad.flush()
+    def attack_log(self, attack_record):
+        self.attack_file.write(json.dumps(attack_record) + "\n")
+        self.attack_file.flush()
+    def close(self):
+        self.file.close()
+        self.bad.close()
+        if self.attack_file:
+            self.attack_file.close()
+
+class relay:
 ## republish on receival of msg to {outtopic}/{device}
-## can choose if u want it to be manipulated or not 
-    def __    
+##usage: generate attackmsg and attack record, put them in relay(attackmsg, attackrecord) to send out the alt msg and save record 
+    
+    def __init__(self, comms, outtopic):
+        self.comms = comms
+        self.outtopic = outtopic
+        self.recorder = recorder
+    def __call__(self, message, meta):
+        self.recorder.attack_log(attack_record)
+        topic = f"{self.outtopic}/{message['device']}"
+        self.comms.h_send(topic, message)
+
