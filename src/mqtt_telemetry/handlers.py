@@ -1,7 +1,7 @@
 # handlers for Comms.subscribe(), the subscription facilitator
 
 import copy, json, logging
-form math import isfinite
+from math import isfinite
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ ENVELOPE_STRINGS = ["schema_version", "run_id", "snapshot_id", "message_id", "ti
 def validate_envelope(message) -> list[str]:
 #returns list of issues with message, empty = good message no issues
     if not isinstance(message, dict):
-        return = ["this message is not JSON."]
+        return ["this message is not JSON."]
     errors=[]
     for field in ENVELOPE_STRINGS:
         value = message.get(field)
@@ -47,13 +47,14 @@ def validate_envelope(message) -> list[str]:
     else:
         if set(measurements) != DEVICE_KEYS[device]:
             errors.append(f"measurements for {device} must be {(DEVICE_KEYS[device])}")
-            for key, value in measurements.items():
-                if isinstance(value, bool) or not isinstance(value, (int,float)) or not isfinite(value):
-                    errors.append(f"{key} must be a number")
+        for key, value in measurements.items():
+            if isinstance(value, bool) or not isinstance(value, (int,float)) or not isfinite(value):
+                errors.append(f"{key} must be a number")
     return errors
 
 class Validated:
     # allows for logging of bad/incomplete/corrupt msgs
+    # Validated(filecontainingnormal.jsonl, filecontainingquarantine.jsonl
     def __init__(self, good, quarantine):
         self.good = good
         self.quarantine = quarantine
@@ -68,38 +69,41 @@ class Validated:
 
 class Recorder:
     #does the actual saving of the data to JSON lines file (format: { meta: {****}, message: {***} } ).
-    def __init__(self, straight_path, quarantine_path, attack_path=None)
+    def __init__(self, straight_path, quarantine_path, attack_path=None):
         self.file = open(straight_path, "a", encoding="utf-8");
         self.bad = open(quarantine_path, "a", encoding="utf-8");
         if attack_path:
             self.attack = open(attack_path, "a", encoding="utf-8");
         else:
             self.attack = None
-    def __call__(self)
+    def __call__(self, message, meta):
         self.file.write(json.dumps({"meta": meta, "message": message}) + "\n")
         self.file.flush()
     def quarantine(self, message, meta, errors):
-        self.bad.write(json.dumps({"meta": meta, "message": message, "errors": errors}) + \n)
+        self.bad.write(json.dumps({"meta": meta, "message": message, "errors": errors}) + "\n")
         self.bad.flush()
-    def attack_log(self, attack_record):
-        self.attack_file.write(json.dumps(attack_record) + "\n")
-        self.attack_file.flush()
+    # this one is a bit weird because AttacksRelay isnt a callback fn
+    def log_attack(self, attack_record):
+        if self.attack:
+            self.attack.write(json.dumps(attack_record) + "\n")
+            self.attack.flush()
     def close(self):
         self.file.close()
         self.bad.close()
-        if self.attack_file:
-            self.attack_file.close()
-
-class relay:
+        if self.attack:
+            self.attack.close()
+# TO BE USED ONLY FOR ATTACKMSGS
+# STRAIGHT PASSTHROUGHS USE H_SEND()
+class AttackRelay:
 ## republish on receival of msg to {outtopic}/{device}
 ##usage: generate attackmsg and attack record, put them in relay(attackmsg, attackrecord) to send out the alt msg and save record 
     
-    def __init__(self, comms, outtopic):
+    def __init__(self, comms, outtopic, recorder):
         self.comms = comms
         self.outtopic = outtopic
         self.recorder = recorder
-    def __call__(self, message, meta):
-        self.recorder.attack_log(attack_record)
+    def __call__(self, message, meta, attack_record):
+        self.recorder.log_attack(attack_record)
         topic = f"{self.outtopic}/{message['device']}"
         self.comms.h_send(topic, message)
 
