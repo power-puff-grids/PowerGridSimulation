@@ -1,6 +1,6 @@
 # handlers for Comms.subscribe(), the subscription facilitator
 
-import copy, json, logging
+import json, logging, threading 
 from math import isfinite
 
 log = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ class Validated:
     def __call__(self, message, meta):
         errors = validate_envelope(message)
         if errors:
-            log.warning("quarantined %s: %s", meta.get("delivery_id", errors))
+            log.warning("quarantined %s: %s", meta.get("delivery_id"), errors)
             self.quarantine(message, meta, errors)
             return
         self.good(message,meta)
@@ -107,3 +107,47 @@ class AttackRelay:
         topic = f"{self.outtopic}/{message['device']}"
         self.comms.h_send(topic, message)
 
+#attacks will be a dict of attacks so that we can choose, will probably have to find a way to 
+#pass arguments for attack at the command line, maybe press x then prompts for what device you
+# want to attack using attack x and then the intensity of the attack assigned to x (which will have
+#to figure out which measurement best fits for that kind of attack i suppose and then pass that
+# stuff in as a param to the attack fns  
+class AttackRouter:
+    def __init__(self, comms, outtopic, attack_relay, attacks, quarantine):
+        self.comms = comms
+        self.outtopic = outtopic
+        self.attack_relay = attack_relay
+        self.attacks = attacks
+        self.quarantine = quarantine
+        self.active_attack = None
+        self.lock = threading.Lock()
+        self.chosen = None
+    def grabfn(self, attack_key, device=None, **params):
+        attack_fn = self.attacks[attack_key]
+        with self.lock:
+            self.chosen = (attack_fn, device, dict(params))
+    #surefire way to bypass toggle and turn off attack
+    def disable(self):
+        with self.lock:
+            self.chosen = None
+    def __call__(self, message, meta):
+        with self.lock:
+            chosen = self.chosen
+        if chosen is None:
+            topic = f"{self.outtopic}/{message['device']}"
+            self.comms.h_send(topic, message)
+            return
+        attack_fn, target, params = chosen
+        #let other stuff go through 
+        if target is not None and message['device'] != target:
+            topic = f"{self.outtopic}/{message['device']}"
+            self.comms.h_send(topic, message)
+            return
+        # the attack fn can reject messages, catch em 
+        try:
+            altered_message, attack_record = attack_fn(message, **params)
+        except ValueError as exc:
+            self.quarantine(message, meta, [f"Attack rejected message: {exc}"])
+            return
+
+        self.attack_relay(altered_message, meta, attack_record)
