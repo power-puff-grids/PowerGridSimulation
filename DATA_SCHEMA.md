@@ -75,7 +75,28 @@ Never mutate original physical rows or original messages. Attack metadata is tru
 
 The subscriber records every received device message with a locally generated unique `delivery_id` and actual UTC `received_at`; duplicate payloads remain distinct deliveries. Preserve the raw received envelope, including claimed identifiers. Controlled attack code records provenance separately; payload IDs are not authenticated evidence.
 
-Proposed attack log columns: `attack_id`, `original_message_id`, `delivery_id`, `attack_type`, `attack_target`, `original_value`, `manipulated_value`, `injected_at`. For the first controlled false-data experiment, change one scalar per attack; `attack_target` is a path such as `measurements.active_power_kw`. `delivery_id` is populated by trusted experiment bookkeeping when the manipulated message is received. Numeric values use the targeted measurement's units. `injected_at` is actual UTC injection time. The attack copy preserves the original envelope identifiers so the initial attack changes only the targeted measurement; it must not mutate the original object or log. Separate delivery IDs disambiguate originals and manipulated copies. Replay, identifier tampering and multi-field attacks require a documented extension before implementation.
+Proposed attack records share these fields: `attack_id`, `injected_at`,
+`original_message_id`, `attack_type`, `attack_target`,
+`false_data_injection`, and `replay`.
+
+For false-data injection, `false_data_injection` contains `measurement`,
+`original_value`, `manipulated_value`, and `offset`; `replay` is null.
+Values and offset use the selected measurement's units. Change one scalar
+per attack and preserve the original envelope identifiers.
+
+For replay, `replay` contains `replayed_id`, `replayed_timestamp`, and
+`replayed_measurements`; `false_data_injection` is null. `replayed_id`
+equals the earlier message's `message_id` and the shared
+`original_message_id`. Replayed measurements are an independent copy of
+the earlier message's measurements.
+
+Attack-specific values are nested in their respective sections; there
+are no top-level `original_value` or `manipulated_value` fields.
+`injected_at` records actual UTC attack preparation time. Trusted
+experiment bookkeeping adds `delivery_id` after receipt to distinguish
+deliveries. CSV serialization of the nested sections remains pending
+team agreement. Identifier tampering and multi-field value changes
+require a documented extension before implementation.
 
 ### Whole-message replay — proposed extension
 
@@ -85,11 +106,11 @@ run_id, snapshot_id, device, measurements, and scenario. Neither the original
 message nor physical simulation results are modified. The function prepares
 the replay payload; publishing it is a separate integration step.
 
-The separate attack record uses attack_type="replay_attack", a new attack_id,
-original_message_id identifying the earlier message, and injected_at recording
-the actual UTC preparation time. For replay, attack_target="message" denotes
-the whole payload; original_value and manipulated_value are null because no
-individual scalar is edited. Subscriber delivery_id identifies the new receipt.
+The separate attack record uses attack_type="replay_attack", a new
+attack_id, and original_message_id identifying the earlier message.
+For replay, attack_target="message" denotes the whole payload.
+The replay section records its earlier ID, simulated timestamp,
+and measurements. Subscriber delivery_id identifies the new receipt.
 
 For dataset integration, trusted experiment bookkeeping must identify the
 current reference run and snapshot independently of the replayed payload.
