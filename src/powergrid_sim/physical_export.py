@@ -53,6 +53,6 @@ def write_physical_csv(rows: list[dict], output: Path) -> None:
     with output.open("w", newline="", encoding="utf-8") as destination:
         writer = csv.DictWriter(destination, fieldnames=fields)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows({**row, "converged": "true" if row["converged"] else "false"} for row in rows)
 
 

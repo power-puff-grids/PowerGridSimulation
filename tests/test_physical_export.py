@@ -28,7 +28,7 @@ def test_three_snapshot_csv_roundtrip(tmp_path):
     assert len({row["snapshot_id"] for row in saved}) == 3
     assert {row["run_id"] for row in saved} == {"test-run"}
     assert {row["timestamp"] for row in saved} == {DEFAULT_TIMESTAMP}
-    assert all(row["converged"] == "True" for row in saved)
+    assert all(row["converged"] == "true" for row in saved)
     assert [float(row["solar_output_mw"]) for row in saved] == [0.15, 0.15, 0.075]
 
 def test_export_rejects_invalid_results():

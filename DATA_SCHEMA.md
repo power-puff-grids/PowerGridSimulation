@@ -88,3 +88,9 @@ An expected-value detector assumes access to an independent trusted reference; d
 ## Changes requiring team review
 
 Review the grouped-device envelope, separate ground-truth labels, identifiers, combined-row design, and timestamp semantics. Decide high-demand pump reactive power/power factor before scenario implementation. Version 1.0 denotes this proposed grouped contract; define any replay/disruption extensions before use. Update this document and notify teammates before renaming shared fields. Current examples are interface fixtures only; no published research dataset exists yet.
+
+## Publisher integration candidate — 2026-11-04
+
+On `integration-publisher`, the original-message publisher follows Brian's `2fb885d` implementation and uses `grid/telemetry/{device}`. Consumers subscribe to `grid/telemetry/+` or `grid/telemetry/#`, rather than the exact parent topic. This documents tested candidate behavior; it does not imply team approval of relay/detector routing. The envelope, unit mappings, identities and label separation above are unchanged.
+
+Publisher QoS1 acknowledgments confirm broker acceptance, while delivery logs must confirm subscriber receipt. CSV timestamps remain simulated event time; they are not publish-time or latency measurements. Retrying a partially acknowledged batch preserves message IDs and can cause repeated deliveries; distinguish them by delivery IDs.

@@ -6,4 +6,4 @@ networkx
 matplotlib
 pytest
 python-igraph
-
+paho-mqtt>=2.0,<3
