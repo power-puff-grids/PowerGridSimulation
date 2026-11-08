@@ -2,6 +2,7 @@
 
 import json, logging, threading 
 from math import isfinite
+from datetime import datetime
 
 log = logging.getLogger(__name__)
 
@@ -29,12 +30,18 @@ def validate_envelope(message) -> list[str]:
     errors=[]
     for field in ENVELOPE_STRINGS:
         value = message.get(field)
-        if not isinstance(value, str) or value == "":
+        if not isinstance(value, str) or not value.strip():
             errors.append(f"{field} is empty or not a string.")
     if message.get("schema_version") != "1.0":
         errors.append("message is based on outdated/unsupported schema version")
-    if isinstance(message.get("timestamp"), str) and not message["timestamp"].endswith("Z"): 
-        errors.append("timestamp is not strictly UTC")
+    timestamp = message.get("timestamp")
+    if isinstance(timestamp, str):
+        try:
+            if not timestamp.endswith("Z") or "T" not in timestamp:
+                raise ValueError("UTC timestamp required")
+            datetime.fromisoformat(timestamp[:-1] + "+00:00")
+        except ValueError:
+            errors.append("timestamp must be a valid UTC ISO 8601 date ending in Z")
     extra = set(message) - set(ENVELOPE_STRINGS) - {"measurements"}
     if extra:
         errors.append(f"unsupported envelope fields: {extra}")
@@ -42,7 +49,7 @@ def validate_envelope(message) -> list[str]:
     device = message.get("device")
     if not isinstance(measurements, dict):
         errors.append("measurements must be dict")
-    elif device not in DEVICE_KEYS:
+    elif not isinstance(device, str) or device not in DEVICE_KEYS:
         errors.append(f"unrecognized/unsupported device: {device}")
     else:
         if set(measurements) != DEVICE_KEYS[device]:

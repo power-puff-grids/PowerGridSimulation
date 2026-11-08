@@ -94,3 +94,11 @@ Review the grouped-device envelope, separate ground-truth labels, identifiers, c
 On `integration-publisher`, the original-message publisher follows Brian's `2fb885d` implementation and uses `grid/telemetry/{device}`. Consumers subscribe to `grid/telemetry/+` or `grid/telemetry/#`, rather than the exact parent topic. This documents tested candidate behavior; it does not imply team approval of relay/detector routing. The envelope, unit mappings, identities and label separation above are unchanged.
 
 Publisher QoS1 acknowledgments confirm broker acceptance, while delivery logs must confirm subscriber receipt. CSV timestamps remain simulated event time; they are not publish-time or latency measurements. Retrying a partially acknowledged batch preserves message IDs and can cause repeated deliveries; distinguish them by delivery IDs.
+
+## Relay experiment records — 2026-11-07
+
+The bounded integration runner records the existing live envelope unchanged on per-device original and processed topics. No attack/condition labels are added to telemetry. Each receiving client assigns its own `delivery_id` and actual UTC `received_at`; relay input IDs and downstream receipt IDs describe different deliveries.
+
+`attack_records.jsonl` retains the attack function's fields and adds `relay_delivery_id`, identifying the recorded original message delivery at the relay. `attack_deliveries.jsonl` copies that trusted sidecar record and adds downstream `delivery_id` after receiving an exact-match forwarded payload. These are separate experiment logs, not changes to the envelope or to the required combined CSV columns. The runner forwards each original ID once; repeated raw deliveries are retained in the input log. All downstream deliveries receive distinct IDs and attacked copies link to the same originating injection record.
+
+This initial bounded configuration attacks one existing scalar on one device across all three scenarios or forwards the entire batch unchanged. Original IDs, scenario and simulated timestamp are preserved. Unknown/mismatched source or received messages fail the experiment; no unresolved match is silently labeled benign. Physical source truth remains separate from forwarding bookkeeping. Dynamic attack toggles, replay and identity manipulation need separate lineage rules before use.

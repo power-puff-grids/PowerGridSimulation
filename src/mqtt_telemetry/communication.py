@@ -33,11 +33,11 @@ class Comms:
         return self.client.publish(f"{TELEMETRY}/{message['device']}", json.dumps(message, allow_nan=False), qos=qos)
         
     #generic sender, no artificial drop or delay, mayhaps use in the relay section
-    def h_send(self, topic, payload):
+    def h_send(self, topic, payload, qos=0):
         msg = dict(payload)
-        self.client.publish(topic, json.dumps(msg))
+        return self.client.publish(topic, json.dumps(msg, allow_nan=False), qos=qos)
 
-    def subscribe(self, topic, callback):
+    def subscribe(self, topic, callback, qos=0):
         def on_message(client, userdata, msg):
             try:
                 message= json.loads(msg.payload.decode())
@@ -50,7 +50,7 @@ class Comms:
             callback(message, meta)
 
         self.client.message_callback_add(topic, on_message)
-        self.client.subscribe(topic)
+        return self.client.subscribe(topic, qos=qos)
 
     def close(self):
         self.client.loop_stop()

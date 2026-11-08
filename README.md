@@ -17,7 +17,7 @@ Brooklyn produces physical results; Brian publishes/subscribes to `grid/telemetr
 
 ## Simulation status
 
-Simulation implementation and validated run instructions will arrive in a separate reviewed PR. The `src/powergrid_sim/build_grid.py` file on this branch is currently a placeholder. Sample data here demonstrates interfaces only.
+This integration branch contains the runnable four-bus simulation, three scenarios, validated physical/telemetry exports, and a tested controlled MQTT attack relay. Combined dataset assembly and detection remain the next stage. Some older sample files remain interface illustrations; the solver-derived normal snapshot is labeled separately.
 
 Work on assigned branches and merge reviewed PRs into main. Do not treat provisional ratings or example records as measured observations. Source acquisition, physical validation, reproducibility verification and dataset licensing remain required before publication.
 
@@ -66,4 +66,37 @@ No experiment messages were sent to a remote broker. The temporary Python test e
 
 Merged the full MQTT branch through `54c6882` while retaining simulation `c6c75fc` and the publisher integration changes. Resolved the dependency conflict by retaining python-igraph and Paho. All 36 tests passed, including the live Mosquitto test with 30 generated messages. An additional offline check verified the merged handlers with the attack function from `77b04f0`: valid envelopes, recording/quarantine, selected-device attacks, unchanged forwarding, disable, original preservation, and separate attack records passed.
 
-Follow-up validation issues: a malformed date ending in Z is accepted by the handler validator; a list-valued device field raises TypeError instead of returning validation errors. These edge cases are recorded for follow-up; the handler implementation is otherwise unchanged from its source branch. The full attack relay over MQTT and downstream detection have not been verified by this checkpoint.
+Follow-up validation issues: a malformed date ending in Z is accepted by the handler validator; a list-valued device field raises TypeError instead of returning validation errors. These edge cases were fixed during the relay integration below, with regression tests. The full attack relay over MQTT and downstream detection have not been verified by this checkpoint.
+
+## Bounded relay experiments (2026-11-07)
+
+The integration branch merges Audrey's attack branch through `77b04f0` and uses its existing `false_data_injection` function with Brian's `AttackRouter`, `AttackRelay`, and `Recorder`. Start Mosquitto in another terminal, then run from this checkout with the environment active:
+
+```sh
+# Forward all three scenarios unchanged:
+PYTHONPATH=src python -m integration.run_relay
+
+# Add 30 kW to solar telemetry in each scenario:
+PYTHONPATH=src python -m integration.run_relay --attack-device solar_pv --measurement active_power_kw --offset 30
+
+# Reduce received battery SOC by 10 percentage points:
+PYTHONPATH=src python -m integration.run_relay --attack-device battery --measurement soc_percent --offset -10
+```
+
+Each invocation generates a fresh physical run and 30 original messages, waits until both subscriptions are accepted, publishes originals to `grid/telemetry/{device}`, and records deliveries from `grid/processed/{device}`. Use `--host`, `--port`, `--timeout`, and `--output-root` as needed. Offsets use the selected measurement's documented units. Without `--attack-device`, all messages pass unchanged. An enabled attack applies to the selected device in all three scenarios; the physical scenario name remains unchanged. The process ends after the complete batch is forwarded and received. Run one experiment at a time on these shared topics; unexpected or mismatched traffic fails the run rather than receiving a guessed label.
+
+Outputs are isolated under `data/generated/experiments/<experiment_id>/` (ignored by Git):
+
+- `physical_results.csv` and `mqtt_telemetry.csv`: original simulation truth and original envelopes.
+- `relay_input.jsonl`: original deliveries with receipt metadata; repeated incoming deliveries are logged but each original message identity is forwarded once.
+- `forwarded_messages.jsonl`: forwarded payloads, original relay-delivery linkage, actual forwarding time, and destination topic.
+- `received_messages.jsonl`: processed deliveries with new delivery IDs and actual UTC receipt time; duplicate downstream deliveries remain distinct.
+- `attack_records.jsonl`: separate injection records linked to the relay input delivery.
+- `attack_deliveries.jsonl`: injection records linked to actual downstream delivery IDs using controlled forwarding bookkeeping.
+- Relay/receiver quarantine logs, simulation stdout/stderr logs, and `summary.json` with configuration, counts, times, and completion/failure status.
+
+Original messages are never rewritten by attacks. Experiment identifiers and actual receipt times are metadata; simulated timestamps remain the fixed fixture time. Fresh UUID output folders avoid overwriting earlier runs. Failed experiments retain their artifacts and a failed summary. Received payloads are checked against exact proposed forwarding payloads only to validate transport/lineage; a future detector must compare to the independent original physical baseline, not to the attack-modified forwarding copy.
+
+The receive callback queues relay work. A separate worker runs routing and waits for QoS1 acknowledgments, allowing MQTT's network thread to continue processing them. Generic send/subscribe now accept optional QoS and return Paho results. The envelope validator now rejects malformed dates and nonstring device identifiers.
+
+Verification: `PYTHONPATH=src python -m pytest -q tests src/attacks/Tests` passed 56 tests, including three live Mosquitto cases: benign forwarding, solar injection, and battery-SOC injection. Each received 30 messages with exact expected payloads; attack cases had three modified messages and three downstream attack links. Detector alerts and the final combined dataset are the next stage.
