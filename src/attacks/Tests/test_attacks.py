@@ -232,3 +232,170 @@ def test_replay_preserves_message_and_original():
     replayed["measurements"]["active_power_kw"] += 10.0
     assert record["replay"]["replayed_measurements"] == before["measurements"]
     assert original == before
+
+
+@pytest.mark.parametrize("message", [None, [], "telemetry", 123, True])
+def test_replay_rejects_non_dictionary_messages(message):
+    before = deepcopy(message)
+
+    with pytest.raises(
+        ValueError,
+        match="previous_message must be a dictionary",
+    ):
+        replay_attack(message)
+
+    assert message == before
+
+
+@pytest.mark.parametrize("field", ["message_id", "timestamp"])
+@pytest.mark.parametrize("value", [None, "", "   ", 123, True])
+def test_replay_rejects_invalid_required_strings(field, value):
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text(encoding="utf-8"))
+    original[field] = value
+    before = deepcopy(original)
+
+    with pytest.raises(
+        ValueError,
+        match=f"{field} must be a nonempty string",
+    ):
+        replay_attack(original)
+
+    assert original == before
+
+
+@pytest.mark.parametrize("field", ["message_id", "timestamp"])
+def test_replay_rejects_missing_required_strings(field):
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text(encoding="utf-8"))
+    del original[field]
+    before = deepcopy(original)
+
+    with pytest.raises(
+        ValueError,
+        match=f"{field} must be a nonempty string",
+    ):
+        replay_attack(original)
+
+    assert original == before
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "2026-10-18T14:00:00",
+        "2026-10-18T14:00:00+00:00",
+        "2026-10-18",
+        "2026-02-30T14:00:00Z",
+        "2026-10-18T25:00:00Z",
+        "not-a-timeZ",
+    ],
+)
+def test_replay_rejects_invalid_timestamps(timestamp):
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text(encoding="utf-8"))
+    original["timestamp"] = timestamp
+    before = deepcopy(original)
+
+    with pytest.raises(ValueError, match="timestamp must be"):
+        replay_attack(original)
+
+    assert original == before
+
+
+@pytest.mark.parametrize(
+    "measurements",
+    [
+        None,
+        [],
+        {},
+        {"": 150.0},
+        {"   ": 150.0},
+        {123: 150.0},
+        {"active_power_kw": True},
+        {"active_power_kw": "150"},
+        {"active_power_kw": None},
+        {"active_power_kw": float("inf")},
+        {"active_power_kw": float("-inf")},
+        {"active_power_kw": float("nan")},
+    ],
+)
+def test_replay_rejects_invalid_measurements(measurements):
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text(encoding="utf-8"))
+    original["measurements"] = measurements
+    before = deepcopy(original)
+
+    with pytest.raises(ValueError, match="measurement"):
+        replay_attack(original)
+
+    assert original == before
+
+
+def test_replay_rejects_missing_measurements():
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text(encoding="utf-8"))
+    del original["measurements"]
+    before = deepcopy(original)
+
+    with pytest.raises(
+        ValueError,
+        match="measurements must be a nonempty dictionary",
+    ):
+        replay_attack(original)
+
+    assert original == before
+
+
+def test_replay_attack_ids_are_distinct():
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text(encoding="utf-8"))
+
+    _, first_record = replay_attack(original)
+    _, second_record = replay_attack(original)
+
+    assert first_record["attack_id"] != second_record["attack_id"]
+    assert first_record["original_message_id"] == original["message_id"]
+    assert second_record["original_message_id"] == original["message_id"]
+
+
+def test_replay_injected_at_is_current_utc():
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text(encoding="utf-8"))
+
+    before = datetime.now(timezone.utc)
+    replayed, record = replay_attack(original)
+    after = datetime.now(timezone.utc)
+
+    timestamp = record["injected_at"]
+    assert timestamp.endswith("Z")
+
+    injected_at = datetime.fromisoformat(
+        timestamp.replace("Z", "+00:00")
+    )
+
+    assert injected_at.utcoffset().total_seconds() == 0
+    assert before <= injected_at <= after
+    assert replayed["timestamp"] == original["timestamp"]
+    assert record["replay"]["replayed_timestamp"] == original["timestamp"]
