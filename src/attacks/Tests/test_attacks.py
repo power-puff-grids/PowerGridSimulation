@@ -31,8 +31,15 @@ def test_false_data_injection():
     assert record["original_message_id"] == original["message_id"]
     assert record["attack_type"] == "false_data_injection"
     assert record["attack_target"] == "measurements.active_power_kw"
-    assert record["original_value"] == before["measurements"]["active_power_kw"]
-    assert record["manipulated_value"] == changed["measurements"]["active_power_kw"]
+    assert record["false_data_injection"] == {
+        "measurement": "active_power_kw",
+        "original_value": before["measurements"]["active_power_kw"],
+        "manipulated_value": changed["measurements"]["active_power_kw"],
+        "offset": 30.0,
+    }
+    assert record["replay"] is None
+    assert "original_value" not in record
+    assert "manipulated_value" not in record
 
 # test that invalid offsets are rejected.
 @pytest.mark.parametrize(
@@ -107,8 +114,13 @@ def test_can_target_voltage():
     assert original == before
     assert changed == expected
     assert record["attack_target"] == "measurements.voltage_kv"
-    assert record["original_value"] == before["measurements"]["voltage_kv"]
-    assert record["manipulated_value"] == changed["measurements"]["voltage_kv"]
+    assert record["false_data_injection"] == {
+        "measurement": "voltage_kv",
+        "original_value": before["measurements"]["voltage_kv"],
+        "manipulated_value": changed["measurements"]["voltage_kv"],
+        "offset": -0.5,
+    }
+    assert record["replay"] is None
 
 # test that the state of charge (soc_percent) can be targeted and manipulated.
 def test_can_target_battery_soc():
@@ -139,8 +151,13 @@ def test_can_target_battery_soc():
     assert changed == expected
     assert record["original_message_id"] == original["message_id"]
     assert record["attack_target"] == "measurements.soc_percent"
-    assert record["original_value"] == 50.0
-    assert record["manipulated_value"] == 40.0
+    assert record["false_data_injection"] == {
+        "measurement": "soc_percent",
+        "original_value": 50.0,
+        "manipulated_value": 40.0,
+        "offset": -10.0,
+    }
+    assert record["replay"] is None
 
 # test that an unknown measurement name is rejected.
 def test_rejects_unknown_measurement():
@@ -197,8 +214,21 @@ def test_replay_preserves_message_and_original():
     assert record["original_message_id"] == before["message_id"]
     assert record["attack_type"] == "replay_attack"
     assert record["attack_target"] == "message"
-    assert record["original_value"] is None
-    assert record["manipulated_value"] is None
+    assert record["false_data_injection"] is None
+    assert record["replay"] == {
+        "replayed_id": before["message_id"],
+        "replayed_timestamp": before["timestamp"],
+        "replayed_measurements": before["measurements"],
+    }
+    assert (
+        record["replay"]["replayed_measurements"]
+        is not original["measurements"]
+    )
+    assert (
+        record["replay"]["replayed_measurements"]
+        is not replayed["measurements"]
+    )
 
     replayed["measurements"]["active_power_kw"] += 10.0
+    assert record["replay"]["replayed_measurements"] == before["measurements"]
     assert original == before
