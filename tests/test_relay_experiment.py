@@ -126,3 +126,83 @@ def test_validator_returns_errors_for_malformed_values(field, value):
     message = json.loads(path.read_text())
     message[field] = value
     assert validate_envelope(message)
+
+
+def test_replay_replaces_one_current_message(local_broker, tmp_path):
+    replay_path = (
+        Path(__file__).parents[1]
+        / "data/sample/telemetry_example.json"
+    )
+    source_bytes = replay_path.read_bytes()
+    earlier = json.loads(source_bytes)
+    output_root = tmp_path / "replay-experiment"
+
+    result = subprocess.run(
+        [
+            sys.executable, "-B", "-m", "integration.run_relay",
+            "--host", "127.0.0.1",
+            "--port", str(local_broker),
+            "--output-root", str(output_root),
+            "--timeout", "10",
+            "--replay-input", str(replay_path),
+            "--replay-scenario", "dust_reduced_solar",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    folders = list(output_root.iterdir())
+    assert len(folders) == 1
+    folder = folders[0]
+    originals = load_messages(folder / "mqtt_telemetry.csv")
+    reference = next(
+        message for message in originals
+        if message["device"] == earlier["device"]
+        and message["scenario"] == "dust_reduced_solar"
+    )
+
+    raw = json_lines(folder / "relay_input.jsonl")
+    forwarded = json_lines(folder / "forwarded_messages.jsonl")
+    received = json_lines(folder / "received_messages.jsonl")
+    attacks = json_lines(folder / "attack_records.jsonl")
+    links = json_lines(folder / "attack_deliveries.jsonl")
+
+    assert len(forwarded) == len(originals) == 30
+    assert len(attacks) == 1
+    attack = attacks[0]
+    assert attack["attack_type"] == "replay_attack"
+    assert attack["original_message_id"] == earlier["message_id"]
+    assert attack["reference_message_id"] == reference["message_id"]
+    assert attack["reference_run_id"] == reference["run_id"]
+    assert attack["reference_snapshot_id"] == reference["snapshot_id"]
+
+    raw_by_id = {item["meta"]["delivery_id"]: item for item in raw}
+    assert raw_by_id[attack["relay_delivery_id"]]["message"] == reference
+
+    replay_forward = next(
+        item for item in forwarded
+        if item["relay_delivery_id"] == attack["relay_delivery_id"]
+    )
+    assert replay_forward["message"] == earlier
+    by_forward = {item["forward_id"]: item for item in forwarded}
+    assert len(by_forward) == 30
+    assert {item["meta"]["forward_id"] for item in received} == set(by_forward)
+
+    for item in forwarded:
+        current = raw_by_id[item["relay_delivery_id"]]["message"]
+        expected = earlier if current == reference else current
+        assert item["message"] == expected
+
+    for item in received:
+        assert item["message"] == by_forward[item["meta"]["forward_id"]]["message"]
+
+    replay_receipts = {
+        item["meta"]["delivery_id"] for item in received
+        if item["meta"]["forward_id"] == replay_forward["forward_id"]
+    }
+    assert replay_receipts
+    assert {link["delivery_id"] for link in links} == replay_receipts
+    assert all(link["attack_id"] == attack["attack_id"] for link in links)
+    assert replay_path.read_bytes() == source_bytes
