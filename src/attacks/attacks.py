@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from math import isfinite
 from uuid import uuid4 # used to generate unique identifiers for each attack record
 
-
+# FALSE DATA INJECTION FUNCTION #
 def false_data_injection(message, offset, measurement="active_power_kw"): # offset is the amount to manipulate by.
     # reject invalid inputs for offset.
     if isinstance(offset, bool) or not isinstance(offset, (int, float)):
@@ -42,13 +42,18 @@ def false_data_injection(message, offset, measurement="active_power_kw"): # offs
         "original_message_id": message["message_id"],
         "attack_type": "false_data_injection",
         "attack_target": f"measurements.{measurement}",
-        "original_value": message["measurements"][measurement],
-        "manipulated_value": manipulated_message["measurements"][measurement],
+        "false_data_injection": {
+            "measurement": measurement,
+            "original_value": value,
+            "manipulated_value": manipulated_value,
+            "offset": offset,
+        },
+        "replay": None,
     }
 
     return manipulated_message, attack_record
 
-
+# REPLAY ATTACK FUNCTION #
 def replay_attack(previous_message):
     replayed_message = deepcopy(previous_message)
 
@@ -58,8 +63,14 @@ def replay_attack(previous_message):
         "original_message_id": previous_message["message_id"],
         "attack_type": "replay_attack",
         "attack_target": "message",
-        "original_value": None,
-        "manipulated_value": None,
+        "false_data_injection": None,
+        "replay": {
+            "replayed_id": previous_message["message_id"],
+            "replayed_timestamp": previous_message["timestamp"],
+            "replayed_measurements": deepcopy(
+                previous_message["measurements"]
+            ),
+        },
     }
 
     return replayed_message, attack_record
