@@ -13,7 +13,7 @@ import threading
 import time
 from uuid import uuid4
 
-from attacks.attacks import false_data_injection
+from attacks.attacks import false_data_injection, replay_attack
 from mqtt_telemetry import Comms
 from mqtt_telemetry.communication import TELEMETRY, PROCESSED
 from mqtt_telemetry.handlers import AttackRelay, AttackRouter, DEVICE_KEYS, Recorder, validate_envelope
@@ -26,7 +26,37 @@ def utc_now():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def subscribe_ready(comms, topic, callback, timeout):
+def select_replay_messages(originals, replay_input, replay_scenario):
+    earlier = json.loads(
+        Path(replay_input).read_text(encoding="utf-8")
+    )
+    errors = validate_envelope(earlier)
+    if errors:
+        raise ValueError(
+            "Invalid replay source: " + "; ".join(errors)
+        )
+
+    candidates = [
+        message for message in originals
+        if message["device"] == earlier["device"]
+        and message["scenario"] == replay_scenario
+    ]
+    if len(candidates) != 1:
+        raise ValueError(
+            "Replay must select exactly one current message "
+            "for the source device and chosen scenario."
+        )
+
+    reference = candidates[0]
+    if earlier["message_id"] == reference["message_id"]:
+        raise ValueError(
+            "Replay source and replacement target must have different message IDs."
+        )
+
+    return earlier, reference
+
+
+def subscribe_ready(comms, topic, callback, timeout, *, include_topic=False):
     deadline = time.monotonic() + timeout
     while not comms.client.is_connected():
         if time.monotonic() >= deadline:
@@ -38,15 +68,17 @@ def subscribe_ready(comms, topic, callback, timeout):
         accepted.append(bool(reasons) and all(reason.value < 128 for reason in reasons))
         ready.set()
     comms.client.on_subscribe = on_subscribe
-    rc, _ = comms.subscribe(topic, callback, qos=1)
+    options = {"include_topic": True} if include_topic else {}
+    rc, _ = comms.subscribe(topic, callback, qos=1, **options)
     if rc != 0 or not ready.wait(timeout) or not accepted[0]:
         raise TimeoutError(f"Subscription not accepted: {topic}")
 
 
 class ConfirmedForwarder:
     """Run only on the relay worker, never on the MQTT network thread."""
-    def __init__(self, comms, path, timeout):
+    def __init__(self, comms, path, timeout, *, track_forward_ids=False):
         self.comms = comms
+        self.track_forward_ids = track_forward_ids
         self.timeout = timeout
         self.expected = {}
         self.lock = threading.Lock()
@@ -54,18 +86,29 @@ class ConfirmedForwarder:
         self.meta = None
 
     def h_send(self, topic, message):
+        forward_id = str(uuid4()) if self.track_forward_ids else None
+        if forward_id is not None:
+            topic = f"{topic}/{forward_id}"
+        expected_key = forward_id if forward_id is not None else message["message_id"]
+
         # Register the exact proposed payload before a subscriber can receive it.
         with self.lock:
-            self.expected[message["message_id"]] = deepcopy(message)
+            self.expected[expected_key] = deepcopy(message)
         info = self.comms.h_send(topic, message, qos=1)
         if info.rc != 0:
             raise RuntimeError("Forwarded publish was not queued")
         info.wait_for_publish(timeout=self.timeout)
         if not info.is_published():
             raise TimeoutError("Forwarded publish was not acknowledged")
-        self.file.write(json.dumps({"relay_delivery_id": self.meta["delivery_id"],
-                                   "forwarded_at": utc_now(), "topic": topic,
-                                   "message": message}, allow_nan=False) + "\n")
+        entry = {
+            "relay_delivery_id": self.meta["delivery_id"],
+            "forwarded_at": utc_now(),
+            "topic": topic,
+            "message": message,
+        }
+        if forward_id is not None:
+            entry["forward_id"] = forward_id
+        self.file.write(json.dumps(entry, allow_nan=False) + "\n")
         self.file.flush()
 
     def close(self):
@@ -73,7 +116,16 @@ class ConfirmedForwarder:
 
 
 def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
-                   attack_device=None, measurement="active_power_kw", offset=30.0):
+                   attack_device=None, measurement="active_power_kw", offset=30.0,
+                   replay_input=None, replay_scenario=None):
+    if (replay_input is None) != (replay_scenario is None):
+        raise ValueError(
+            "Replay requires both a source file and a target scenario."
+        )
+    if replay_input is not None and attack_device is not None:
+        raise ValueError(
+            "Choose either replay or false-data injection for an experiment."
+        )
     if not isfinite(timeout) or timeout <= 0 or not isfinite(offset):
         raise ValueError("Timeout must be positive and offset must be finite")
     if attack_device is not None and (attack_device not in DEVICE_KEYS or measurement not in DEVICE_KEYS[attack_device]):
@@ -111,11 +163,30 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
         originals = load_messages(folder / "mqtt_telemetry.csv")
         summary["simulation_run_id"] = originals[0]["run_id"]
         source = {message["message_id"]: message for message in originals}
+        earlier = reference = None
+        if replay_input is not None:
+            earlier, reference = select_replay_messages(
+                originals, replay_input, replay_scenario
+            )
+            summary.update(
+                replay_input=str(Path(replay_input).resolve()),
+                replay_source_loaded_at=utc_now(),
+                replay_source_message_id=earlier["message_id"],
+                reference_message_id=reference["message_id"],
+                reference_run_id=reference["run_id"],
+                reference_snapshot_id=reference["snapshot_id"],
+                replay_scenario=replay_scenario,
+            )
         raw_log = Recorder(folder / "relay_input.jsonl", folder / "relay_quarantine.jsonl", folder / "attack_records.jsonl")
         received_log = Recorder(folder / "received_messages.jsonl", folder / "receiver_quarantine.jsonl")
         relay = Comms(host=host, port=port)
         receiver = Comms(host=host, port=port)
-        forwarder = ConfirmedForwarder(relay, folder / "forwarded_messages.jsonl", timeout)
+        forwarder = ConfirmedForwarder(
+            relay,
+            folder / "forwarded_messages.jsonl",
+            timeout,
+            track_forward_ids=earlier is not None,
+        )
         base_attack_relay = AttackRelay(forwarder, PROCESSED, raw_log)
         def linked_attack_relay(message, meta, record):
             base_attack_relay(message, meta, {**record, "relay_delivery_id": meta["delivery_id"]})
@@ -133,15 +204,29 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
                 if errors:
                     received_log.quarantine(message, meta, errors)
                     raise ValueError("Invalid forwarded message")
+                expected_key = message["message_id"]
+                if forwarder.track_forward_ids:
+                    topic = meta.get("topic", "")
+                    prefix = f"{PROCESSED}/{message['device']}/"
+                    if not topic.startswith(prefix):
+                        raise ValueError("Unexpected forwarded topic")
+
+                    forward_id = topic[len(prefix):]
+                    if not forward_id or "/" in forward_id:
+                        raise ValueError("Invalid forwarding ID in topic")
+
+                    meta = {**meta, "forward_id": forward_id}
+                    expected_key = forward_id
+
                 with forwarder.lock:
-                    expected = deepcopy(forwarder.expected.get(message["message_id"]))
+                    expected = deepcopy(forwarder.expected.get(expected_key))
                 if expected is None or message != expected:
                     received_log.quarantine(message, meta, ["Unresolved or mismatched forwarded payload"])
                     raise ValueError("Received payload does not match trusted forwarding bookkeeping")
                 received_log(message, meta)
                 with state_lock:
                     received.append({"meta": deepcopy(meta), "message": deepcopy(message)})
-                    received_ids.add(message["message_id"])
+                    received_ids.add(expected_key)
             except Exception as exc:
                 with state_lock:
                     failures.append(str(exc))
@@ -164,7 +249,19 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
                     if message["message_id"] in processed_ids:
                         continue  # Log duplicate raw deliveries; forward each original identity once.
                     forwarder.meta = meta
-                    router(message, meta)
+                    if (
+                        reference is not None
+                        and message["message_id"] == reference["message_id"]
+                    ):
+                        replayed, record = replay_attack(earlier)
+                        record.update(
+                            reference_message_id=reference["message_id"],
+                            reference_run_id=reference["run_id"],
+                            reference_snapshot_id=reference["snapshot_id"],
+                        )
+                        linked_attack_relay(replayed, meta, record)
+                    else:
+                        router(message, meta)
                     with state_lock:
                         processed_ids.add(message["message_id"])
                 except Exception as exc:
@@ -175,7 +272,17 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
 
         worker = threading.Thread(target=process_queue, name="relay-worker")
         worker.start()
-        subscribe_ready(receiver, f"{PROCESSED}/+", receive_callback, timeout)
+        receiver_topic = (
+            f"{PROCESSED}/+/+" if forwarder.track_forward_ids
+            else f"{PROCESSED}/+"
+        )
+        subscribe_ready(
+            receiver,
+            receiver_topic,
+            receive_callback,
+            timeout,
+            include_topic=forwarder.track_forward_ids,
+        )
         subscribe_ready(relay, f"{TELEMETRY}/+", relay_callback, timeout)
         acknowledged = publish_messages(originals, host=host, port=port, timeout=timeout)
         deadline = time.monotonic() + timeout
@@ -183,7 +290,14 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
             with state_lock:
                 if failures:
                     raise RuntimeError(failures[0])
-                complete = processed_ids == set(source) and received_ids == set(source)
+
+                with forwarder.lock:
+                    expected_receipts = set(forwarder.expected)
+
+                complete = (
+                    processed_ids == set(source)
+                    and received_ids == expected_receipts
+                )
             if complete:
                 break
             if time.monotonic() >= deadline:
@@ -197,12 +311,52 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
         receiver.close(); receiver = None
         # Link labels after receipt, using controlled bookkeeping, not payload labels.
         records = [json.loads(line) for line in (folder / "attack_records.jsonl").read_text().splitlines()]
-        by_original = {record["original_message_id"]: record for record in records}
+        by_key = {
+            record["original_message_id"]: record
+            for record in records
+        }
+        if forwarder.track_forward_ids:
+            by_relay = {
+                record["relay_delivery_id"]: record
+                for record in records
+            }
+            if len(by_relay) != len(records):
+                raise ValueError("Ambiguous attack input-delivery links")
+
+            forwarded = [
+                json.loads(line)
+                for line in (folder / "forwarded_messages.jsonl")
+                .read_text().splitlines()
+            ]
+            by_key = {}
+            for item in forwarded:
+                record = by_relay.get(item["relay_delivery_id"])
+                if record is not None:
+                    by_key[item["forward_id"]] = {
+                        **record,
+                        "forward_id": item["forward_id"],
+                    }
+
+            linked_inputs = {
+                record["relay_delivery_id"]
+                for record in by_key.values()
+            }
+            if len(by_key) != len(records) or linked_inputs != set(by_relay):
+                raise ValueError("Incomplete attack forwarding links")
+
         with (folder / "attack_deliveries.jsonl").open("w") as output:
             for item in received:
-                record = by_original.get(item["message"]["message_id"])
-                if record:
-                    output.write(json.dumps({**record, "delivery_id": item["meta"]["delivery_id"]}) + "\n")
+                key = (
+                    item["meta"]["forward_id"]
+                    if forwarder.track_forward_ids
+                    else item["message"]["message_id"]
+                )
+                record = by_key.get(key)
+                if record is not None:
+                    output.write(json.dumps({
+                        **record,
+                        "delivery_id": item["meta"]["delivery_id"],
+                    }) + "\n")
         summary.update(status="completed", original_messages=len(source), broker_acknowledged=acknowledged,
                        forwarded_messages=len(processed_ids), received_deliveries=len(received),
                        attacked_messages=len(records), finished_at=utc_now())
@@ -229,12 +383,31 @@ def main():
     parser.add_argument("--attack-device", choices=sorted(DEVICE_KEYS))
     parser.add_argument("--measurement", default="active_power_kw")
     parser.add_argument("--offset", type=float, default=30.0)
+    parser.add_argument(
+        "--replay-input",
+        type=Path,
+        help="Saved earlier telemetry JSON message to replay.",
+    )
+    parser.add_argument(
+        "--replay-scenario",
+        choices=["normal", "high_irrigation_demand", "dust_reduced_solar"],
+        help="Current scenario whose matching device message is replaced.",
+    )
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
     try:
-        folder = run_experiment(args.output_root, host=args.host, port=args.port, timeout=args.timeout,
-                                attack_device=args.attack_device, measurement=args.measurement, offset=args.offset)
+        folder = run_experiment(
+            args.output_root,
+            host=args.host,
+            port=args.port,
+            timeout=args.timeout,
+            attack_device=args.attack_device,
+            measurement=args.measurement,
+            offset=args.offset,
+            replay_input=args.replay_input,
+            replay_scenario=args.replay_scenario,
+        )
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
         parser.exit(1, f"Experiment failed: {exc}\n")
     print(f"Completed relay experiment. Saved records to {folder}")
