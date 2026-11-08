@@ -77,6 +77,28 @@ The subscriber records every received device message with a locally generated un
 
 Proposed attack log columns: `attack_id`, `original_message_id`, `delivery_id`, `attack_type`, `attack_target`, `original_value`, `manipulated_value`, `injected_at`. For the first controlled false-data experiment, change one scalar per attack; `attack_target` is a path such as `measurements.active_power_kw`. `delivery_id` is populated by trusted experiment bookkeeping when the manipulated message is received. Numeric values use the targeted measurement's units. `injected_at` is actual UTC injection time. The attack copy preserves the original envelope identifiers so the initial attack changes only the targeted measurement; it must not mutate the original object or log. Separate delivery IDs disambiguate originals and manipulated copies. Replay, identifier tampering and multi-field attacks require a documented extension before implementation.
 
+### Whole-message replay — proposed extension
+
+A replay attack returns an independent deep copy of an earlier telemetry
+message. All payload fields remain unchanged, including timestamp, message_id,
+run_id, snapshot_id, device, measurements, and scenario. Neither the original
+message nor physical simulation results are modified. The function prepares
+the replay payload; publishing it is a separate integration step.
+
+The separate attack record uses attack_type="replay_attack", a new attack_id,
+original_message_id identifying the earlier message, and injected_at recording
+the actual UTC preparation time. For replay, attack_target="message" denotes
+the whole payload; original_value and manipulated_value are null because no
+individual scalar is edited. Subscriber delivery_id identifies the new receipt.
+
+For dataset integration, trusted experiment bookkeeping must identify the
+current reference run and snapshot independently of the replayed payload.
+The payload's retained identifiers describe the earlier state. Do not use
+that earlier state as the current expected truth. All measurement rows from
+the replayed delivery receive attack_label=1, even if some values happen to
+match current conditions. Current-reference bookkeeping and its storage
+format remain subject to team agreement before integration.
+
 Combined row granularity: **one measurement from one received device delivery**. Flatten `measurements` after receipt. Required columns: `schema_version`, `delivery_id`, `message_id`, `original_message_id`, `run_id`, `snapshot_id`, `timestamp`, `received_at`, `scenario`, `device`, `measurement`, `unit`, `expected_value`, `received_value`, `condition_type`, `attack_type`, `attack_label`, `attack_target`. All flattened measurements from the same delivery share `delivery_id`; `(delivery_id, measurement)` is unique. `measurement` is the exact nested key, e.g. `active_power_kw`; `unit` is from the mapping. Expected values must use the same telemetry units as received values.
 
 Use trusted experiment bookkeeping and immutable publisher logs to resolve original messages and snapshot truth. Record unresolved joins as diagnostics; do not silently assign a benign label. Benign records have empty `attack_target`. `attack_label=1` applies to every measurement row from a delivery containing an attack, including unchanged sibling measurements; `attack_target` identifies the scalar actually changed. Thus message-level attack presence is distinct from per-measurement corruption. Scenario-to-condition mapping lives in `data/metadata/scenarios.csv`.
