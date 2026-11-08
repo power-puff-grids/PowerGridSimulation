@@ -7,9 +7,7 @@ import socket
 import subprocess
 import sys
 import time
-
 import pytest
-
 from mqtt_telemetry.handlers import validate_envelope
 from powergrid_sim.publish_telemetry import load_messages
 
@@ -32,7 +30,9 @@ def local_broker(tmp_path):
         deadline = time.monotonic() + 5
         while True:
             if broker.poll() is not None:
-                pytest.fail(broker.stderr.read().decode())
+                stderr = broker.stderr
+                assert stderr is not None
+                pytest.fail(stderr.read().decode())
             try:
                 with socket.create_connection(('127.0.0.1', port), timeout=0.1):
                     break
@@ -103,8 +103,13 @@ def test_relay_records_and_payloads(local_broker, tmp_path, device, measurement,
         assert attack['relay_delivery_id'] in raw_delivery_ids
         original = originals[attack['original_message_id']]
         assert original['device'] == device
-        assert attack['original_value'] == original['measurements'][measurement]
-        assert attack['manipulated_value'] == attack['original_value'] + offset
+        details = attack['false_data_injection']
+        assert details['measurement'] == measurement
+        assert details['offset'] == offset
+        assert details['original_value'] == original['measurements'][measurement]
+        assert details['manipulated_value'] == details['original_value'] + offset
+        assert attack['replay'] is None
+        assert 'original_value' not in attack and 'manipulated_value' not in attack
         assert attack['attack_target'] == f'measurements.{measurement}'
     for link in links:
         assert delivery_by_id[link['delivery_id']]['message']['message_id'] == link['original_message_id']

@@ -75,7 +75,50 @@ Never mutate original physical rows or original messages. Attack metadata is tru
 
 The subscriber records every received device message with a locally generated unique `delivery_id` and actual UTC `received_at`; duplicate payloads remain distinct deliveries. Preserve the raw received envelope, including claimed identifiers. Controlled attack code records provenance separately; payload IDs are not authenticated evidence.
 
-Proposed attack log columns: `attack_id`, `original_message_id`, `delivery_id`, `attack_type`, `attack_target`, `original_value`, `manipulated_value`, `injected_at`. For the first controlled false-data experiment, change one scalar per attack; `attack_target` is a path such as `measurements.active_power_kw`. `delivery_id` is populated by trusted experiment bookkeeping when the manipulated message is received. Numeric values use the targeted measurement's units. `injected_at` is actual UTC injection time. The attack copy preserves the original envelope identifiers so the initial attack changes only the targeted measurement; it must not mutate the original object or log. Separate delivery IDs disambiguate originals and manipulated copies. Replay, identifier tampering and multi-field attacks require a documented extension before implementation.
+Proposed attack records share these fields: `attack_id`, `injected_at`,
+`original_message_id`, `attack_type`, `attack_target`,
+`false_data_injection`, and `replay`.
+
+For false-data injection, `false_data_injection` contains `measurement`,
+`original_value`, `manipulated_value`, and `offset`; `replay` is null.
+Values and offset use the selected measurement's units. Change one scalar
+per attack and preserve the original envelope identifiers.
+
+For replay, `replay` contains `replayed_id`, `replayed_timestamp`, and
+`replayed_measurements`; `false_data_injection` is null. `replayed_id`
+equals the earlier message's `message_id` and the shared
+`original_message_id`. Replayed measurements are an independent copy of
+the earlier message's measurements.
+
+Attack-specific values are nested in their respective sections; there
+are no top-level `original_value` or `manipulated_value` fields.
+`injected_at` records actual UTC attack preparation time. Trusted
+experiment bookkeeping adds `delivery_id` after receipt to distinguish
+deliveries. CSV serialization of the nested sections remains pending
+team agreement. Identifier tampering and multi-field value changes
+require a documented extension before implementation.
+
+### Whole-message replay — proposed extension
+
+A replay attack returns an independent deep copy of an earlier telemetry
+message. All payload fields remain unchanged, including timestamp, message_id,
+run_id, snapshot_id, device, measurements, and scenario. Neither the original
+message nor physical simulation results are modified. The function prepares
+the replay payload; publishing it is a separate integration step.
+
+The separate attack record uses attack_type="replay_attack", a new
+attack_id, and original_message_id identifying the earlier message.
+For replay, attack_target="message" denotes the whole payload.
+The replay section records its earlier ID, simulated timestamp,
+and measurements. Subscriber delivery_id identifies the new receipt.
+
+For dataset integration, trusted experiment bookkeeping must identify the
+current reference run and snapshot independently of the replayed payload.
+The payload's retained identifiers describe the earlier state. Do not use
+that earlier state as the current expected truth. All measurement rows from
+the replayed delivery receive attack_label=1, even if some values happen to
+match current conditions. Current-reference bookkeeping and its storage
+format remain subject to team agreement before integration.
 
 Combined row granularity: **one measurement from one received device delivery**. Flatten `measurements` after receipt. Required columns: `schema_version`, `delivery_id`, `message_id`, `original_message_id`, `run_id`, `snapshot_id`, `timestamp`, `received_at`, `scenario`, `device`, `measurement`, `unit`, `expected_value`, `received_value`, `condition_type`, `attack_type`, `attack_label`, `attack_target`. All flattened measurements from the same delivery share `delivery_id`; `(delivery_id, measurement)` is unique. `measurement` is the exact nested key, e.g. `active_power_kw`; `unit` is from the mapping. Expected values must use the same telemetry units as received values.
 
@@ -102,3 +145,9 @@ The bounded integration runner records the existing live envelope unchanged on p
 `attack_records.jsonl` retains the attack function's fields and adds `relay_delivery_id`, identifying the recorded original message delivery at the relay. `attack_deliveries.jsonl` copies that trusted sidecar record and adds downstream `delivery_id` after receiving an exact-match forwarded payload. These are separate experiment logs, not changes to the envelope or to the required combined CSV columns. The runner forwards each original ID once; repeated raw deliveries are retained in the input log. All downstream deliveries receive distinct IDs and attacked copies link to the same originating injection record.
 
 This initial bounded configuration attacks one existing scalar on one device across all three scenarios or forwards the entire batch unchanged. Original IDs, scenario and simulated timestamp are preserved. Unknown/mismatched source or received messages fail the experiment; no unresolved match is silently labeled benign. Physical source truth remains separate from forwarding bookkeeping. Dynamic attack toggles, replay and identity manipulation need separate lineage rules before use.
+
+## Integration compatibility — nested attack details
+
+Current relay outputs store Audrey's shared nested attack records as JSONL. `attack_records.jsonl` adds `relay_delivery_id`; `attack_deliveries.jsonl` additionally links the same record to downstream `delivery_id`. Attack-specific values remain inside `false_data_injection` or `replay`, never inside live telemetry. This JSONL representation does not decide the still-pending CSV serialization of nested attack details or rename the combined dataset fields.
+
+Earlier archived flat FDI JSONL records remain readable by the FDI batch verifier without changing the source files. New experiments emit nested records. The current live runner/batch does not perform replay; earlier payload identity must be separated from current physical reference identity before replay transport/dataset integration.

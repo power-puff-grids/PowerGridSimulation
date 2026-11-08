@@ -100,3 +100,62 @@ Original messages are never rewritten by attacks. Experiment identifiers and act
 The receive callback queues relay work. A separate worker runs routing and waits for QoS1 acknowledgments, allowing MQTT's network thread to continue processing them. Generic send/subscribe now accept optional QoS and return Paho results. The envelope validator now rejects malformed dates and nonstring device identifiers.
 
 Verification: `PYTHONPATH=src python -m pytest -q tests src/attacks/Tests` passed 56 tests, including three live Mosquitto cases: benign forwarding, solar injection, and battery-SOC injection. Each received 30 messages with exact expected payloads; attack cases had three modified messages and three downstream attack links. Detector alerts and the final combined dataset are the next stage.
+
+## Nine-configuration batch
+
+With Mosquitto running and the integration virtual environment active:
+
+```sh
+PYTHONPATH=src python -m integration.run_batch
+```
+
+The command runs these fixed experimental configurations sequentially, each covering normal, high irrigation and dust-reduced solar:
+
+| Configuration | Offset |
+|---|---|
+| Benign pass-through | None |
+| Solar power injection | −30, −15, −5, +5, +15, +30 kW (six experiments) |
+| Battery SOC injection | −10, +10 percentage points (two experiments) |
+
+These offsets are controlled test choices, not measured attack distributions, sensor accuracy estimates or detection thresholds. The nine configurations reuse three deterministic physical states; 27 snapshot records do not represent 27 distinct physical operating points. No new weather data or physical dynamics are introduced.
+
+Outputs are isolated in `data/generated/batches/<batch_id>/`. Each case has its own subfolder containing the existing UUID experiment folder. `manifest.json` records planned cases, live status, configuration, relative experiment paths, verified counts, errors, code revision/dirty status, Python and selected dependency versions. `manifest.csv` is a convenient experiment index, not the combined cyberphysical dataset. Both are updated after each case; the JSON and CSV are individually replaced as complete files. Generated files remain ignored by Git.
+
+By default, the batch stops after a failed case, marks remaining cases `not_run` and exits nonzero. Use `--continue-on-error` to attempt the remaining cases; the final exit code is still nonzero if any case fails. Interruptions retain an `interrupted` manifest. Failed experiment diagnostics are retained; only fully verified cases contribute to successful totals.
+
+Optional arguments: `--host`, `--port`, `--timeout` (per-operation relay timeout) and `--output-root`. For example:
+
+```sh
+PYTHONPATH=src python -m integration.run_batch --host localhost --port 1883 --output-root data/generated/batches
+```
+
+Do not run concurrent experiments or other publishers on the same original/processed topics during a batch. Verification checks source/forward/receipt coverage, exact envelope preservation, selected value changes, topic routing, attack records, delivery links and quarantine/summary consistency. Duplicate downstream deliveries remain distinct; counts can therefore exceed nominal receipt/measurement totals and are reported explicitly.
+
+Without duplicate deliveries, a completed batch has 270 original and received messages, 405 scalar measurement records, 24 modified messages/scalars, and 54 message-level attack-labeled scalar rows. The last number includes unchanged sibling measurements in attacked messages under the shared schema. These are artifact-consistency counts, not detector precision/recall. No combined dataset or detector is implemented by the batch command.
+
+The complete suite passed 67 tests, including batch success/failure/interruption and corrupted-artifact checks alongside the live relay tests. Run `PYTHONPATH=src python -m pytest -q tests src/attacks/Tests` to reproduce the checks.
+
+## Updated attack records and replay function (2026-11-07)
+
+Merged Audrey's attack branch through `034860f` with its commit history. The current FDI attack record nests measurement/value/offset details under `false_data_injection` and includes `replay: null`. New relay logs preserve that structure; the downstream delivery-link record adds trusted delivery metadata without flattening or rewriting the attack details. The telemetry envelope itself is unchanged.
+
+Current record access:
+
+```python
+record["false_data_injection"]["measurement"]
+record["false_data_injection"]["original_value"]
+record["false_data_injection"]["manipulated_value"]
+record["false_data_injection"]["offset"]
+```
+
+The batch verifier uses `integration.attack_records.fdi_details` to read both the current nested format and earlier flat experiment archives. It validates the declared target and current offset as well as original/modified values. Legacy records did not store an offset field; their requested changes are checked against the experiment configuration and actual values. Original archive files are never migrated in place. Ambiguous mixed formats and replay records are rejected by this FDI-only reader.
+
+Audrey's replay function and example are included:
+
+```sh
+PYTHONPATH=src python -m examples.replay_attack_demo
+```
+
+This prepares and prints a copy of an earlier message; it does not publish a replay. The live runner and nine-case batch still execute only benign forwarding and false-data injection. Replay retains earlier run/snapshot/message IDs, so live replay requires separate trusted current-reference bookkeeping before it can be added safely. Do not label an unchanged old payload benign merely because it matches its own old source record.
+
+Verification: all 117 tests passed, including Audrey's replay tests, nested/legacy compatibility checks, and live FDI relay cases. The original nine-case flat-record archive still verifies without rewriting. Replay transport and combined-dataset replay labeling are not yet implemented. Dataset assembly remains the immediate semester milestone; ML detection and operational alerts remain planned for next semester.

@@ -35,8 +35,10 @@ def make_artifacts(root, *, attack_device=None, measurement='active_power_kw', o
             record = {'attack_id': f'attack-{i}', 'original_message_id': message['message_id'],
                       'relay_delivery_id': raw_id, 'attack_type': 'false_data_injection',
                       'attack_target': f'measurements.{measurement}',
-                      'original_value': message['measurements'][measurement],
-                      'manipulated_value': altered['measurements'][measurement]}
+                      'false_data_injection': {'measurement': measurement,
+                          'original_value': message['measurements'][measurement],
+                          'manipulated_value': altered['measurements'][measurement], 'offset': offset},
+                      'replay': None}
             records.append(record)
             links.append({**record, 'delivery_id': delivery_id})
         forwarded.append({'relay_delivery_id': raw_id, 'topic': f"grid/processed/{message['device']}", 'message': altered})
@@ -133,3 +135,34 @@ def test_preserves_failed_experiment_location(tmp_path):
 def test_invalid_timeout_has_no_outputs(tmp_path):
     with pytest.raises(ValueError): run_batch(tmp_path, timeout=float('nan'))
     assert not list(tmp_path.iterdir())
+
+
+def test_reads_archived_flat_attack_records_without_rewriting(tmp_path):
+    case = next(c for c in batch_cases() if c.case_id == 'solar_plus_5kw')
+    folder = make_artifacts(tmp_path, attack_device=case.attack_device, measurement=case.measurement, offset=case.offset)
+    originals = {}
+    for name in ('attack_records.jsonl', 'attack_deliveries.jsonl'):
+        path = folder / name
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        for record in rows:
+            details = record.pop('false_data_injection')
+            record.pop('replay')
+            record['original_value'] = details['original_value']
+            record['manipulated_value'] = details['manipulated_value']
+        write_lines(path, rows)
+        originals[name] = path.read_bytes()
+    assert verify_experiment(folder, case)['attacked_messages'] == 3
+    for name, contents in originals.items():
+        assert (folder / name).read_bytes() == contents
+
+
+@pytest.mark.parametrize('field,value', [('measurement','soc_percent'), ('offset',999), ('original_value',999), ('manipulated_value',999)])
+def test_rejects_wrong_nested_attack_details(tmp_path, field, value):
+    case = next(c for c in batch_cases() if c.case_id == 'solar_plus_5kw')
+    folder = make_artifacts(tmp_path, attack_device=case.attack_device, measurement=case.measurement, offset=case.offset)
+    path = folder / 'attack_records.jsonl'
+    records = [json.loads(line) for line in path.read_text().splitlines()]
+    records[0]['false_data_injection'][field] = value
+    write_lines(path, records)
+    with pytest.raises(ValueError):
+        verify_experiment(folder, case)

@@ -56,7 +56,9 @@ def test_publisher_roundtrip_with_mosquitto(tmp_path):
         deadline = time.monotonic() + 5
         while True:
             if broker.poll() is not None:
-                pytest.fail(broker.stderr.read().decode())
+                stderr = broker.stderr
+                assert stderr is not None
+                pytest.fail(stderr.read().decode())
             try:
                 with socket.create_connection(('127.0.0.1', port), timeout=0.2):
                     break

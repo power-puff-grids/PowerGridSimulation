@@ -13,6 +13,7 @@ import sys
 from uuid import uuid4
 
 from .run_relay import ROOT, run_experiment, utc_now
+from .attack_records import fdi_details
 from powergrid_sim.publish_telemetry import load_messages
 
 
@@ -95,8 +96,12 @@ def verify_experiment(folder: Path, case: BatchCase) -> dict:
     for message_id, record in by_original.items():
         require(record["attack_type"] == "false_data_injection", "unexpected attack type")
         require(record["attack_target"] == f"measurements.{case.measurement}", "incorrect attack target")
-        require(record["original_value"] == source[message_id]["measurements"][case.measurement], "incorrect original attack value")
-        require(record["manipulated_value"] == expected[message_id]["measurements"][case.measurement], "incorrect modified attack value")
+        details = fdi_details(record)
+        require(details["measurement"] == case.measurement, "incorrect nested attack measurement")
+        if details["offset"] is not None:
+            require(details["offset"] == case.offset, "incorrect recorded attack offset")
+        require(details["original_value"] == source[message_id]["measurements"][case.measurement], "incorrect original attack value")
+        require(details["manipulated_value"] == expected[message_id]["measurements"][case.measurement], "incorrect modified attack value")
         raw_item = raw_by_delivery.get(record["relay_delivery_id"])
         require(raw_item is not None and raw_item["message"]["message_id"] == message_id, "attack source-delivery mismatch")
     attacked_deliveries = {delivery for delivery, item in received_by_delivery.items()
