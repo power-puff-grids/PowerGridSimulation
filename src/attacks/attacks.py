@@ -47,3 +47,19 @@ def false_data_injection(message, offset, measurement="active_power_kw"): # offs
     }
 
     return manipulated_message, attack_record
+
+
+def replay_attack(previous_message):
+    replayed_message = deepcopy(previous_message)
+
+    attack_record = {
+        "attack_id": str(uuid4()),
+        "injected_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "original_message_id": previous_message["message_id"],
+        "attack_type": "replay_attack",
+        "attack_target": "message",
+        "original_value": None,
+        "manipulated_value": None,
+    }
+
+    return replayed_message, attack_record
