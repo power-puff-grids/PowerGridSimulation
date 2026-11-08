@@ -37,7 +37,7 @@ class Comms:
         msg = dict(payload)
         return self.client.publish(topic, json.dumps(msg, allow_nan=False), qos=qos)
 
-    def subscribe(self, topic, callback, qos=0):
+    def subscribe(self, topic, callback, qos=0, *, include_topic=False):
         def on_message(client, userdata, msg):
             try:
                 message= json.loads(msg.payload.decode())
@@ -47,6 +47,8 @@ class Comms:
                     "delivery_id": str(uuid.uuid4()),
                     "received_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
                     }
+            if include_topic:
+                meta["topic"] = msg.topic
             callback(message, meta)
 
         self.client.message_callback_add(topic, on_message)
