@@ -3,8 +3,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 import pytest
-from src.attacks.attacks import false_data_injection
+from src.attacks.attacks import false_data_injection, replay_attack
 
+# ***FALSE DATA INJECTION TESTS*** #
 def test_false_data_injection():
     # load a normal message and save its original information.
     sample_path = (
@@ -87,7 +88,7 @@ def test_injected_at_is_current_utc():
     assert injected_at.utcoffset().total_seconds() == 0
     assert before <= injected_at <= after
 
-
+# test that the voltage measurement can be targeted and manipulated.
 def test_can_target_voltage():
     sample_path = (
         Path(__file__).resolve().parents[3]
@@ -109,7 +110,7 @@ def test_can_target_voltage():
     assert record["original_value"] == before["measurements"]["voltage_kv"]
     assert record["manipulated_value"] == changed["measurements"]["voltage_kv"]
 
-
+# test that the state of charge (soc_percent) can be targeted and manipulated.
 def test_can_target_battery_soc():
     original = {
         "schema_version": "1.0",
@@ -141,7 +142,7 @@ def test_can_target_battery_soc():
     assert record["original_value"] == 50.0
     assert record["manipulated_value"] == 40.0
 
-
+# test that an unknown measurement name is rejected.
 def test_rejects_unknown_measurement():
     sample_path = (
         Path(__file__).resolve().parents[3]
@@ -174,4 +175,30 @@ def test_rejects_nonfinite_result():
     ):
         false_data_injection(original, 1e308)
 
+    assert original == before
+
+# ***REPLAY ATTACK TESTS*** #
+# test that replay_attack preserves the original message and returns a new copy.
+def test_replay_preserves_message_and_original():
+    sample_path = (
+        Path(__file__).resolve().parents[3]
+        / "data/sample/telemetry_example.json"
+    )
+    original = json.loads(sample_path.read_text(encoding="utf-8"))
+    before = deepcopy(original)
+
+    replayed, record = replay_attack(original)
+
+    assert original == before
+    assert replayed == before
+    assert replayed is not original
+    assert replayed["measurements"] is not original["measurements"]
+
+    assert record["original_message_id"] == before["message_id"]
+    assert record["attack_type"] == "replay_attack"
+    assert record["attack_target"] == "message"
+    assert record["original_value"] is None
+    assert record["manipulated_value"] is None
+
+    replayed["measurements"]["active_power_kw"] += 10.0
     assert original == before
