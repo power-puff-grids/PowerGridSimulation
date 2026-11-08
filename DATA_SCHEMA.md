@@ -151,3 +151,31 @@ This initial bounded configuration attacks one existing scalar on one device acr
 Current relay outputs store Audrey's shared nested attack records as JSONL. `attack_records.jsonl` adds `relay_delivery_id`; `attack_deliveries.jsonl` additionally links the same record to downstream `delivery_id`. Attack-specific values remain inside `false_data_injection` or `replay`, never inside live telemetry. This JSONL representation does not decide the still-pending CSV serialization of nested attack details or rename the combined dataset fields.
 
 Earlier archived flat FDI JSONL records remain readable by the FDI batch verifier without changing the source files. New experiments emit nested records. The current live runner/batch does not perform replay; earlier payload identity must be separated from current physical reference identity before replay transport/dataset integration.
+
+## Controlled replacement replay — proposed integration
+
+A replay experiment selects one saved earlier message and one current
+message for the same device. When the selected current message reaches
+the relay, its outgoing payload is replaced with an unchanged deep copy
+of the earlier message. All other messages pass through unchanged.
+Replay and false-data injection are separate experiment modes.
+
+The original current message remains in the immutable publisher and
+relay-input logs. The replay payload retains the earlier message's
+timestamp, identifiers, measurements, and scenario.
+
+The replay attack record retains original_message_id as the earlier
+source message ID. Integration adds reference_message_id,
+reference_run_id, and reference_snapshot_id identifying the current
+message and physical state being replaced. relay_delivery_id identifies
+the current message's arrival at the relay.
+
+Trusted bookkeeping must link each outgoing attempt to its actual
+downstream delivery_id independently of payload message_id. Repeated
+identical payloads must not cause benign and replay deliveries to share
+a guessed label. Missing or ambiguous correlations fail verification.
+
+Expected values come from the current reference state, while received
+values come from the replayed payload. Reference metadata remains outside
+live telemetry. Independent scenarios do not establish chronological
+history; source availability and replay order must be explicitly recorded.
