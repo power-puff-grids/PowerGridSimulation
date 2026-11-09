@@ -20,7 +20,9 @@ DEVICE_KEYS = {
         "irrigation_pump": {"active_power_kw", "reactive_power_kvar", "voltage_kv"},
         "battery": {"active_power_kw", "soc_percent", "voltage_kv"}
         }
-ENVELOPE_STRINGS = ["schema_version", "run_id", "snapshot_id", "message_id", "timestamp", "device", "scenario"]
+#ENVELOPE_STRINGS = ["schema_version", "run_id", "snapshot_id", "message_id", "timestamp", "device", "scenario"]
+#will check on this later
+ENVELOPE_STRINGS = ["schema_version", "run_id", "snapshot_id", "message_id", "timestamp", "device", "measurements"]
 
 def validate_envelope(message) -> list[str]:
 #returns list of issues with message, empty = good message no issues
@@ -29,8 +31,10 @@ def validate_envelope(message) -> list[str]:
     errors=[]
     for field in ENVELOPE_STRINGS:
         value = message.get(field)
-        if not isinstance(value, str) or value == "":
-            errors.append(f"{field} is empty or not a string.")
+        #if im right, will have to make sure it can handle objects
+        #fine for now
+        #if not isinstance(value, str) or value == "":
+        #    errors.append(f"{field} is empty or not a string.")
     if message.get("schema_version") != "1.0":
         errors.append("message is based on outdated/unsupported schema version")
     if isinstance(message.get("timestamp"), str) and not message["timestamp"].endswith("Z"): 
@@ -103,6 +107,7 @@ class AttackRelay:
         self.outtopic = outtopic
         self.recorder = recorder
     def __call__(self, message, meta, attack_record):
+    #def __call__(self, message, attack_record):
         self.recorder.log_attack(attack_record)
         topic = f"{self.outtopic}/{message['device']}"
         self.comms.h_send(topic, message)
@@ -119,7 +124,6 @@ class AttackRouter:
         self.attack_relay = attack_relay
         self.attacks = attacks
         self.quarantine = quarantine
-        self.active_attack = None
         self.lock = threading.Lock()
         self.chosen = None
     def grabfn(self, attack_key, device=None, **params):

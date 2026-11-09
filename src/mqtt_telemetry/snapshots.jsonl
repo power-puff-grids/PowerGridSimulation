@@ -1,0 +1,121 @@
+[{
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca8",
+    "message_id": "c8e16e88-6e92-4c29-99e6-3977c04bb360",
+    "timestamp": "2026-10-18T14:00:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 150.0,
+      "voltage_kv": 12.471755070659391
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "183b25ce-0c93-4f50-b55e-058961097ca9",
+    "message_id": "d8e16e88-6e92-4c29-99e6-3977c04bb361",
+    "timestamp": "2026-10-18T14:01:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 153.4,
+      "voltage_kv": 12.4682
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "283b25ce-0c93-4f50-b55e-058961097ca0",
+    "message_id": "e8e16e88-6e92-4c29-99e6-3977c04bb362",
+    "timestamp": "2026-10-18T14:02:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 157.8,
+      "voltage_kv": 12.4751
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "383b25ce-0c93-4f50-b55e-058961097ca1",
+    "message_id": "f8e16e88-6e92-4c29-99e6-3977c04bb363",
+    "timestamp": "2026-10-18T14:03:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 161.2,
+      "voltage_kv": 12.4803
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "483b25ce-0c93-4f50-b55e-058961097ca2",
+    "message_id": "08e16e88-6e92-4c29-99e6-3977c04bb364",
+    "timestamp": "2026-10-18T14:04:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 164.7,
+      "voltage_kv": 12.4778
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "583b25ce-0c93-4f50-b55e-058961097ca3",
+    "message_id": "18e16e88-6e92-4c29-99e6-3977c04bb365",
+    "timestamp": "2026-10-18T14:05:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 168.1,
+      "voltage_kv": 12.4826
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "683b25ce-0c93-4f50-b55e-058961097ca4",
+    "message_id": "28e16e88-6e92-4c29-99e6-3977c04bb366",
+    "timestamp": "2026-10-18T14:06:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 165.5,
+      "voltage_kv": 12.4791
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "783b25ce-0c93-4f50-b55e-058961097ca5",
+    "message_id": "38e16e88-6e92-4c29-99e6-3977c04bb367",
+    "timestamp": "2026-10-18T14:07:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 162.3,
+      "voltage_kv": 12.4735
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "883b25ce-0c93-4f50-b55e-058961097ca6",
+    "message_id": "48e16e88-6e92-4c29-99e6-3977c04bb368",
+    "timestamp": "2026-10-18T14:08:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 159.6,
+      "voltage_kv": 12.4698
+    }
+  },
+  {
+    "schema_version": "1.0",
+    "run_id": "a2961845-0b06-4dd9-bfd3-3f3eaa821544",
+    "snapshot_id": "983b25ce-0c93-4f50-b55e-058961097ca7",
+    "message_id": "58e16e88-6e92-4c29-99e6-3977c04bb369",
+    "timestamp": "2026-10-18T14:09:00Z",
+    "device": "solar_pv",
+    "measurements": {
+      "active_power_kw": 155.2,
+      "voltage_kv": 12.4664
+    }
+  }
+]
