@@ -1,5 +1,3 @@
-"""Generate and relay a bounded physical experiment through an existing broker."""
-
 import argparse
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -12,16 +10,16 @@ import sys
 import threading
 import time
 from uuid import uuid4
-
 from attacks.attacks import false_data_injection, replay_attack
 from mqtt_telemetry import Comms
 from mqtt_telemetry.communication import TELEMETRY, PROCESSED
 from mqtt_telemetry.handlers import AttackRelay, AttackRouter, DEVICE_KEYS, Recorder, validate_envelope
 from powergrid_sim.publish_telemetry import load_messages, publish_messages
+from .simulation_input import archive_weather_input
 
 ROOT = Path(__file__).resolve().parents[2]
 
-
+# generate and relay a bounded physical experiment through an existing broker
 def utc_now():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -71,6 +69,7 @@ def subscribe_ready(comms, topic, callback, timeout, *, include_topic=False):
         time.sleep(0.01)
     ready = threading.Event()
     accepted = []
+    
     def on_subscribe(client, userdata, mid, reasons, properties):
         accepted.append(bool(reasons) and all(reason.value < 128 for reason in reasons))
         ready.set()
@@ -80,9 +79,8 @@ def subscribe_ready(comms, topic, callback, timeout, *, include_topic=False):
     if rc != 0 or not ready.wait(timeout) or not accepted[0]:
         raise TimeoutError(f"Subscription not accepted: {topic}")
 
-
 class ConfirmedForwarder:
-    """Run only on the relay worker, never on the MQTT network thread."""
+    #run only on the relay worker, never on the MQTT network thread.
     def __init__(self, comms, path, timeout, *, track_forward_ids=False):
         self.comms = comms
         self.track_forward_ids = track_forward_ids
@@ -93,6 +91,9 @@ class ConfirmedForwarder:
         self.meta = None
 
     def h_send(self, topic, message):
+        meta = self.meta
+        if meta is None:
+            raise RuntimeError("Relay delivery metadata must be set before forwarding")
         forward_id = str(uuid4()) if self.track_forward_ids else None
         if forward_id is not None:
             topic = f"{topic}/{forward_id}"
@@ -108,7 +109,7 @@ class ConfirmedForwarder:
         if not info.is_published():
             raise TimeoutError("Forwarded publish was not acknowledged")
         entry = {
-            "relay_delivery_id": self.meta["delivery_id"],
+            "relay_delivery_id": meta["delivery_id"],
             "forwarded_at": utc_now(),
             "topic": topic,
             "message": message,
@@ -121,11 +122,10 @@ class ConfirmedForwarder:
     def close(self):
         self.file.close()
 
-
 def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
                    attack_device=None, measurement="active_power_kw", offset=30.0,
-                   replay_input=None, replay_scenario=None,
-                   replay_snapshot_id=None):
+                   simulation_input=None, replay_input=None,
+                   replay_scenario=None, replay_snapshot_id=None):
     if replay_snapshot_id is not None and replay_input is None:
         raise ValueError("A replay snapshot ID requires a replay source file.")
     if (replay_input is None) != (replay_scenario is None):
@@ -145,11 +145,15 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
     experiment_id = str(uuid4())
     folder = Path(output_root).resolve() / experiment_id
     folder.mkdir(parents=True, exist_ok=False)
+    
+    
     summary = {"experiment_id": experiment_id, "status": "running", "started_at": utc_now(),
                "attack_device": attack_device, "measurement": measurement if attack_device else None,
                "offset": offset if attack_device else None, "host": host, "port": port}
     def save_summary():
         (folder / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    
+    
     save_summary()
     relay = receiver = forwarder = raw_log = received_log = None
     worker = None
@@ -160,16 +164,20 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
     received_ids = set()
     processed_ids = set()
     state_lock = threading.Lock()
+   
     try:
-        # Reuse the simulation's existing entry point and exact output schema.
-        simulation = subprocess.run(
-            [sys.executable, "-m", "powergrid_sim.run_scenarios", "--output", str(folder / "physical_results.csv"),
-             "--telemetry-output", str(folder / "mqtt_telemetry.csv")],
-            capture_output=True, text=True, timeout=60, cwd=ROOT)
-        (folder / "simulation.stdout.log").write_text(simulation.stdout)
-        (folder / "simulation.stderr.log").write_text(simulation.stderr)
-        if simulation.returncode != 0:
-            raise RuntimeError("Simulation failed; see simulation.stderr.log")
+        if simulation_input is not None:
+            summary["simulation_input"] = archive_weather_input(simulation_input, folder)
+        else:
+            # Reuse the simulation's existing entry point and exact output schema.
+            simulation = subprocess.run(
+                [sys.executable, "-m", "powergrid_sim.run_scenarios", "--output", str(folder / "physical_results.csv"),
+                 "--telemetry-output", str(folder / "mqtt_telemetry.csv")],
+                capture_output=True, text=True, timeout=60, cwd=ROOT)
+            (folder / "simulation.stdout.log").write_text(simulation.stdout)
+            (folder / "simulation.stderr.log").write_text(simulation.stderr)
+            if simulation.returncode != 0:
+                raise RuntimeError("Simulation failed; see simulation.stderr.log")
         originals = load_messages(folder / "mqtt_telemetry.csv")
         summary["simulation_run_id"] = originals[0]["run_id"]
         source = {message["message_id"]: message for message in originals}
@@ -390,6 +398,8 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, default=ROOT / "data/generated/experiments")
+    parser.add_argument("--simulation-input", type=Path,
+                        help="Completed weather-run folder; archive and publish its saved outputs unchanged")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=1883)
     parser.add_argument("--timeout", type=float, default=20.0)
@@ -422,6 +432,7 @@ def main():
             attack_device=args.attack_device,
             measurement=args.measurement,
             offset=args.offset,
+            simulation_input=args.simulation_input,
             replay_input=args.replay_input,
             replay_scenario=args.replay_scenario,
             replay_snapshot_id=args.replay_snapshot_id,
@@ -429,6 +440,8 @@ def main():
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
         parser.exit(1, f"Experiment failed: {exc}\n")
     print(f"Completed relay experiment. Saved records to {folder}")
+
+
 
 
 if __name__ == "__main__":
