@@ -26,7 +26,9 @@ def utc_now():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def select_replay_messages(originals, replay_input, replay_scenario):
+def select_replay_messages(
+    originals, replay_input, replay_scenario, replay_snapshot_id=None
+):
     earlier = json.loads(
         Path(replay_input).read_text(encoding="utf-8")
     )
@@ -40,11 +42,16 @@ def select_replay_messages(originals, replay_input, replay_scenario):
         message for message in originals
         if message["device"] == earlier["device"]
         and message["scenario"] == replay_scenario
+        and (
+            replay_snapshot_id is None
+            or message["snapshot_id"] == replay_snapshot_id
+        )
     ]
     if len(candidates) != 1:
         raise ValueError(
             "Replay must select exactly one current message "
-            "for the source device and chosen scenario."
+            "for the source device and chosen scenario. "
+            "Provide a snapshot ID when multiple messages match."
         )
 
     reference = candidates[0]
@@ -117,7 +124,10 @@ class ConfirmedForwarder:
 
 def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
                    attack_device=None, measurement="active_power_kw", offset=30.0,
-                   replay_input=None, replay_scenario=None):
+                   replay_input=None, replay_scenario=None,
+                   replay_snapshot_id=None):
+    if replay_snapshot_id is not None and replay_input is None:
+        raise ValueError("A replay snapshot ID requires a replay source file.")
     if (replay_input is None) != (replay_scenario is None):
         raise ValueError(
             "Replay requires both a source file and a target scenario."
@@ -166,7 +176,10 @@ def run_experiment(output_root, *, host="localhost", port=1883, timeout=20.0,
         earlier = reference = None
         if replay_input is not None:
             earlier, reference = select_replay_messages(
-                originals, replay_input, replay_scenario
+                originals,
+                replay_input,
+                replay_scenario,
+                replay_snapshot_id=replay_snapshot_id,
             )
             summary.update(
                 replay_input=str(Path(replay_input).resolve()),
@@ -393,6 +406,10 @@ def main():
         choices=["normal", "high_irrigation_demand", "dust_reduced_solar"],
         help="Current scenario whose matching device message is replaced.",
     )
+    parser.add_argument(
+        "--replay-snapshot-id",
+        help="Exact current snapshot to target when a scenario has multiple messages.",
+    )
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
@@ -407,6 +424,7 @@ def main():
             offset=args.offset,
             replay_input=args.replay_input,
             replay_scenario=args.replay_scenario,
+            replay_snapshot_id=args.replay_snapshot_id,
         )
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
         parser.exit(1, f"Experiment failed: {exc}\n")
