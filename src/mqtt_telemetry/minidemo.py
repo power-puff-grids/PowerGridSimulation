@@ -79,7 +79,7 @@ def main():
                 router.disable()
             elif key == "x":
                 device = input("target device: ")
-                measurement = (input("measurement to change: (active power kw if left empty)") or
+                measurement = (input("measurement to change (attacks active_power_kw if empty):") or
                                "active_power_kw")
                 offset = float(input("Offset: "))
                 router.grabfn("x", device=device, offset=offset, measurement=measurement)
