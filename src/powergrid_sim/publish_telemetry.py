@@ -1,5 +1,4 @@
-"""Publish saved original telemetry to the local experiment's MQTT broker."""
-
+# publish saved original telemetry to the local experiment's MQTT broker.
 import argparse
 import csv
 from datetime import datetime
@@ -7,16 +6,31 @@ import json
 from math import isfinite
 from pathlib import Path
 import time
-
+from typing import Callable, Protocol
 from mqtt_telemetry import Comms
 from .telemetry import ENVELOPE_FIELDS
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT = PROJECT_ROOT / "data/generated/mqtt_telemetry.csv"
 
+class PublishReceipt(Protocol):
+    @property
+    def rc(self) -> int: ...
+    def wait_for_publish(self, timeout: float) -> None: ...
+    def is_published(self) -> bool: ...
+
+class ConnectionState(Protocol):
+    def is_connected(self) -> bool: ...
+
+class PublisherTransport(Protocol):
+    # Interface shared by the MQTT transport and test doubles.
+    @property
+    def client(self) -> ConnectionState: ...
+    def m_send(self, message: dict, qos: int = 0) -> PublishReceipt | None: ...
+    def close(self) -> None: ...
 
 def load_messages(path: Path) -> list[dict]:
-    """Validate the entire saved batch before making a broker connection."""
+    # validate the entire saved batch before making a broker connection.
     with (PROJECT_ROOT / "data/metadata/telemetry_measurements.csv").open(newline="") as source:
         device_keys = {}
         for item in csv.DictReader(source):
@@ -29,6 +43,7 @@ def load_messages(path: Path) -> list[dict]:
     if not messages:
         raise ValueError("Telemetry CSV contains no messages.")
     seen = set()
+    
     for line, message in enumerate(messages, 2):
         try:
             if set(message) != set(ENVELOPE_FIELDS):
@@ -59,14 +74,13 @@ def load_messages(path: Path) -> list[dict]:
             raise ValueError(f"Invalid telemetry CSV row {line}: {exc}") from exc
     return messages
 
-
-def publish_messages(messages: list[dict], *, host="localhost", port=1883,
-                     timeout=10.0, comms_factory=Comms) -> int:
-    """Send originals unchanged, waiting for each QoS 1 broker acknowledgment."""
+def publish_messages(messages: list[dict], *, host="localhost", port=1883,timeout=10.0, comms_factory: Callable[..., PublisherTransport] = Comms) -> int:
+    # Send originals unchanged, waiting for each QoS 1 broker acknowledgment.
     if not isfinite(timeout) or timeout <= 0:
         raise ValueError("Timeout must be finite and positive.")
     comms = comms_factory(host=host, port=port)
     acknowledged = 0
+    
     try:
         deadline = time.monotonic() + timeout
         while not comms.client.is_connected():
@@ -81,6 +95,7 @@ def publish_messages(messages: list[dict], *, host="localhost", port=1883,
             if not info.is_published():
                 raise TimeoutError(f"No broker acknowledgment for {message['message_id']}")
             acknowledged += 1
+    
     except Exception as exc:
         raise RuntimeError(
             f"Publishing failed after {acknowledged}/{len(messages)} broker acknowledgments: {exc}. "
@@ -89,7 +104,6 @@ def publish_messages(messages: list[dict], *, host="localhost", port=1883,
     finally:
         comms.close()
     return acknowledged
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -108,6 +122,7 @@ def main() -> None:
         parser.exit(1, f"Publisher error: {exc}\n")
     print(f"Broker acknowledged {count}/{len(messages)} messages on grid/telemetry/<device>.")
     print("Subscriber receipt must be verified separately; source identifiers were preserved.")
+
 
 
 if __name__ == "__main__":
