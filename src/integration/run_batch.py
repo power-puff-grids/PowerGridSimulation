@@ -1,5 +1,3 @@
-"""Run a fixed nine-configuration relay batch and verify its saved artifacts."""
-
 import argparse
 from copy import deepcopy
 import csv
@@ -11,11 +9,10 @@ from pathlib import Path
 import subprocess
 import sys
 from uuid import uuid4
-
 from .run_relay import ROOT, run_experiment, utc_now
 from .attack_records import fdi_details
 from powergrid_sim.publish_telemetry import load_messages
-
+# fixed nine-configuration relay batch runner and verify its saved artifacts.
 
 @dataclass(frozen=True)
 class BatchCase:
@@ -23,7 +20,6 @@ class BatchCase:
     attack_device: str | None = None
     measurement: str = "active_power_kw"
     offset: float = 0.0
-
 
 def batch_cases() -> tuple[BatchCase, ...]:
     cases = [BatchCase("benign")]
@@ -34,13 +30,11 @@ def batch_cases() -> tuple[BatchCase, ...]:
                   BatchCase("battery_soc_plus_10pp", "battery", "soc_percent", 10)))
     return tuple(cases)
 
-
 def read_jsonl(path):
     return [json.loads(line) for line in path.read_text().splitlines()]
 
-
 def verify_experiment(folder: Path, case: BatchCase) -> dict:
-    """Check values, complete coverage and attack lineage; not a detector."""
+    # check values, complete coverage and attack lineage; not a detector.
     def require(condition, message):
         if not condition:
             raise ValueError(f"Artifact verification failed: {message}")
@@ -53,12 +47,14 @@ def verify_experiment(folder: Path, case: BatchCase) -> dict:
                 "attack measurement/offset differs from plan")
     originals = load_messages(folder / "mqtt_telemetry.csv")
     source = {m["message_id"]: m for m in originals}
-    require(len(source) == 30, "expected 30 original device messages")
-    require(sum(len(m["measurements"]) for m in originals) == 45, "expected 45 original scalar values")
+    expected_count = summary.get("simulation_input", {}).get("original_messages", 30)
+    require(len(source) == expected_count, "original message count differs from simulation input")
+    require(sum(len(m["measurements"]) for m in originals) == expected_count // 10 * 15, "original scalar count differs from snapshot coverage")
     require({m["scenario"] for m in originals} == {"normal", "high_irrigation_demand", "dust_reduced_solar"},
             "missing physical scenario")
+   
     for scenario in {m["scenario"] for m in originals}:
-        require(len([m for m in originals if m["scenario"] == scenario]) == 10, "expected ten messages per scenario")
+        require(len([m for m in originals if m["scenario"] == scenario]) == expected_count // 3, "unequal scenario coverage")
     raw = read_jsonl(folder / "relay_input.jsonl")
     received = read_jsonl(folder / "received_messages.jsonl")
     forwarded = read_jsonl(folder / "forwarded_messages.jsonl")
@@ -67,16 +63,19 @@ def verify_experiment(folder: Path, case: BatchCase) -> dict:
     raw_by_delivery = {r["meta"]["delivery_id"]: r for r in raw}
     require(len(raw_by_delivery) == len(raw), "duplicate relay delivery IDs")
     require({r["message"]["message_id"] for r in raw} == set(source), "original delivery coverage mismatch")
+    
     for item in raw:
         require(item["message"] == source.get(item["message"]["message_id"]), "original payload was changed")
     expected = deepcopy(source)
     attacked_ids = set()
+    
     for message_id, message in expected.items():
         if case.attack_device and message["device"] == case.attack_device:
             message["measurements"][case.measurement] += case.offset
             attacked_ids.add(message_id)
-    require(len(forwarded) == 30 and {r["message"]["message_id"] for r in forwarded} == set(source),
+    require(len(forwarded) == expected_count and {r["message"]["message_id"] for r in forwarded} == set(source),
             "forwarding count/identity mismatch")
+    
     for item in forwarded:
         message_id = item["message"]["message_id"]
         require(item["message"] == expected[message_id], "incorrect forwarded value or envelope")
@@ -93,11 +92,13 @@ def verify_experiment(folder: Path, case: BatchCase) -> dict:
     require(len(records) == len(by_original) == len(attacked_ids), "incorrect attack-record count")
     require(set(by_original) == attacked_ids, "attack-record target mismatch")
     require(len({r["attack_id"] for r in records}) == len(records), "duplicate attack IDs")
+    
     for message_id, record in by_original.items():
         require(record["attack_type"] == "false_data_injection", "unexpected attack type")
         require(record["attack_target"] == f"measurements.{case.measurement}", "incorrect attack target")
         details = fdi_details(record)
         require(details["measurement"] == case.measurement, "incorrect nested attack measurement")
+       
         if details["offset"] is not None:
             require(details["offset"] == case.offset, "incorrect recorded attack offset")
         require(details["original_value"] == source[message_id]["measurements"][case.measurement], "incorrect original attack value")
@@ -108,25 +109,29 @@ def verify_experiment(folder: Path, case: BatchCase) -> dict:
                            if item["message"]["message_id"] in attacked_ids}
     require(len(links) == len(attacked_deliveries) and {r["delivery_id"] for r in links} == attacked_deliveries,
             "downstream attack links incomplete or duplicated")
+   
     for link in links:
         original_id = received_by_delivery[link["delivery_id"]]["message"]["message_id"]
         require({k: v for k, v in link.items() if k != "delivery_id"} == by_original[original_id],
                 "downstream attack record mismatch")
+   
     for name in ("relay_quarantine.jsonl", "receiver_quarantine.jsonl"):
         require(not read_jsonl(folder / name), f"nonempty {name}")
-    require(summary["original_messages"] == summary["broker_acknowledged"] == summary["forwarded_messages"] == 30,
+    require(summary["original_messages"] == summary["broker_acknowledged"] == summary["forwarded_messages"] == expected_count,
             "summary source/forward counts mismatch")
     require(summary["received_deliveries"] == len(received) and summary["attacked_messages"] == len(records),
             "summary receipt/attack counts mismatch")
+   
+   
     return {"original_messages": len(source), "received_deliveries": len(received),
             "measurement_rows": sum(len(r["message"]["measurements"]) for r in received),
             "attacked_messages": len(attacked_ids), "modified_scalar_values": len(attacked_ids),
             "attack_labeled_rows": sum(len(r["message"]["measurements"]) for r in received
                                        if r["message"]["message_id"] in attacked_ids)}
 
-
 def save_manifest(folder: Path, manifest: dict):
     # Replace only complete JSON documents, so interrupted runs retain a readable index.
+    
     temporary = folder / "manifest.json.tmp"
     temporary.write_text(json.dumps(manifest, indent=2, allow_nan=False) + "\n")
     temporary.replace(folder / "manifest.json")
@@ -134,21 +139,25 @@ def save_manifest(folder: Path, manifest: dict):
               "original_messages", "received_deliveries", "measurement_rows", "attacked_messages",
               "modified_scalar_values", "attack_labeled_rows", "error"]
     temporary_csv = folder / "manifest.csv.tmp"
+   
     with temporary_csv.open("w", newline="", encoding="utf-8") as output:
         writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(manifest["experiments"])
     temporary_csv.replace(folder / "manifest.csv")
 
-
 def run_batch(output_root, *, host="localhost", port=1883, timeout=20.0,
-              continue_on_error=False, experiment_runner=run_experiment):
+              continue_on_error=False, experiment_runner=run_experiment, simulation_input=None):
+   
     if not isfinite(timeout) or timeout <= 0 or not 1 <= port <= 65535:
         raise ValueError("Use a positive finite timeout and a valid broker port")
+    source_summary = json.loads((Path(simulation_input) / "summary.json").read_text()) if simulation_input else None
+    multiplier = source_summary["snapshots"] // 3 if source_summary else 1
     batch_id = str(uuid4())
     folder = Path(output_root).resolve() / batch_id
     folder.mkdir(parents=True, exist_ok=False)
     cases = batch_cases()
+    
     try:
         revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
         dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).strip())
@@ -163,6 +172,12 @@ def run_batch(output_root, *, host="localhost", port=1883, timeout=20.0,
                 "planned_counts_without_duplicates": {"experiments": 9, "original_messages": 270,
                   "measurement_rows": 405, "attacked_messages": 24, "attack_labeled_rows": 54},
                 "experiments": [{**asdict(case), "status": "pending", "experiment_dir": None, "error": None} for case in cases]}
+   
+    if source_summary is not None and simulation_input is not None:
+        manifest["simulation_input"] = str(Path(simulation_input).resolve())
+        manifest["physical_diversity_note"] = "All attack configurations reuse the same weather-driven counterfactual snapshots; no independent farms or state dynamics."
+        for key in ("original_messages", "measurement_rows", "attacked_messages", "attack_labeled_rows"):
+            manifest["planned_counts_without_duplicates"][key] *= multiplier
     save_manifest(folder, manifest)
     try:
         for case, entry in zip(cases, manifest["experiments"]):
@@ -170,9 +185,10 @@ def run_batch(output_root, *, host="localhost", port=1883, timeout=20.0,
             save_manifest(folder, manifest)
             case_root = folder / case.case_id
             try:
+                extra = {"simulation_input": simulation_input} if simulation_input is not None else {}
                 experiment = experiment_runner(case_root, host=host, port=port, timeout=timeout,
                                                attack_device=case.attack_device, measurement=case.measurement,
-                                               offset=case.offset)
+                                               offset=case.offset, **extra)
                 experiment = Path(experiment).resolve()
                 entry["experiment_dir"] = str(experiment.relative_to(folder))
                 entry.update(verify_experiment(experiment, case), status="completed")
@@ -186,6 +202,7 @@ def run_batch(output_root, *, host="localhost", port=1883, timeout=20.0,
             print(f"{case.case_id}: {entry['status']}", flush=True)
             if entry["status"] == "failed" and not continue_on_error:
                 break
+        
         for entry in manifest["experiments"]:
             if entry["status"] == "pending":
                 entry.update(status="not_run", error="Stopped after an earlier failure")
@@ -207,9 +224,12 @@ def run_batch(output_root, *, host="localhost", port=1883, timeout=20.0,
     return folder
 
 
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, default=ROOT / "data/generated/batches")
+    parser.add_argument("--simulation-input", type=Path, help="Saved weather-run folder reused across all nine cases")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=1883)
     parser.add_argument("--timeout", type=float, default=20.0)
@@ -219,13 +239,16 @@ def main():
         parser.error("--port must be between 1 and 65535")
     try:
         folder = run_batch(args.output_root, host=args.host, port=args.port, timeout=args.timeout,
-                           continue_on_error=args.continue_on_error)
+                           continue_on_error=args.continue_on_error, simulation_input=args.simulation_input)
     except (OSError, ValueError) as exc:
         parser.exit(1, f"Batch error: {exc}\n")
     manifest = json.loads((folder / "manifest.json").read_text())
     print(f"Batch {manifest['status']}. Manifest: {folder / 'manifest.json'}")
     if manifest["status"] != "completed":
         parser.exit(1)
+
+
+
 
 
 if __name__ == "__main__":
